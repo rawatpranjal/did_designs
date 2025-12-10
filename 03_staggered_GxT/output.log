@@ -1,0 +1,38 @@
+============================================================
+Module 03: Staggered Adoption (G×T Design)
+Minimum Wage Panel Data (mpdta)
+============================================================
+
+[1] Loading Data...
+Dataset: 2500 rows, 500 counties
+Cohorts: [0, 2004, 2006, 2007]
+
+[2] Calculating ATT(g,t) Matrix (Callaway-Sant'Anna Logic)...
+
+Sample of ATT(g,t) Results:
+ cohort  time  event_time       att
+   2004  2003          -1  0.000000
+   2004  2004           0 -0.019372
+   2004  2005           1 -0.078319
+   2004  2006           2 -0.136274
+   2004  2007           3 -0.100811
+   2006  2003          -3  0.000994
+
+[3] Aggregating Results...
+CS Average Treatment Effect (Simple Aggregation): -0.0398
+
+[4] Running Two-Way Fixed Effects (TWFE)...
+TWFE Coefficient: -0.0365 (SE: 0.0133)
+
+Difference (TWFE - CS): 0.0032
+Interpretation: TWFE suggests a larger negative effect
+than the rigorous CS estimator. Bias driven by
+using already-treated units as controls.
+
+[5] Creating Showcase Visualizations...
+Saved: /Users/pranjal/Code/did_designs/03_staggered_GxT/figs/att_gt_matrix.png
+Saved: /Users/pranjal/Code/did_designs/03_staggered_GxT/figs/staggered_event_study.png
+
+============================================================
+Module 03 Complete!
+============================================================

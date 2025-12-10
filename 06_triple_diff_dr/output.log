@@ -1,0 +1,49 @@
+======================================================================
+Module 06: Triple Differences - The Robust Way
+Meyer, Viscusi, & Durbin (1995) - Worker's Compensation
+======================================================================
+
+[1] Loading Data...
+Dataset: 6844 observations
+Structure: 2 States (KY, MI) x 2 Groups (High/Low Earn) x 2 Periods
+
+[2] Checking Covariate Imbalance...
+
+Covariate Comparison: High Earners vs Low Earners
+------------------------------------------------------------
+Covariate          High Earners     Low Earners      Difference
+------------------------------------------------------------
+Age                       37.13           33.05           +4.08
+Married (%)                85.6            58.6           +27.0
+Male (%)                   96.0            66.4           +29.5
+------------------------------------------------------------
+
+Key Finding: High earners are OLDER, more MALE, and more MARRIED.
+If injury duration trends depend on these factors (which they likely do),
+naive DDD comparing High vs Low will be biased.
+
+[3] Naive DDD (OLS with linear controls)...
+Naive DDD:  0.0360 (SE: 0.1733)
+
+[4] Robust DDD (Outcome Regression / Target-Adjusted)...
+Bootstrapping SE (approx 5-10s)...
+Robust DDD: -0.1177 (SE: 0.2037)
+
+[5] Comparison
+--------------------------------------------------
+Method                 Estimate         SE
+--------------------------------------------------
+Naive (OLS)              0.0360     0.1733
+Robust (OR)             -0.1177     0.2037
+--------------------------------------------------
+Difference: -0.1538
+The difference represents the bias removed by properly adjusting for covariates.
+
+[6] Creating Showcase Visualizations...
+Saved: /Users/pranjal/Code/did_designs/06_triple_diff_dr/figs/covariate_imbalance.png
+Saved: /Users/pranjal/Code/did_designs/06_triple_diff_dr/figs/ddd_decomposition.png
+Saved: /Users/pranjal/Code/did_designs/06_triple_diff_dr/figs/ddd_comparison.png
+
+======================================================================
+Module 06 Complete!
+======================================================================

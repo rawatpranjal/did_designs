@@ -1,0 +1,83 @@
+============================================================
+Module 05: Heterogeneous Treatment Effects (HTE)
+mpdta - Minimum Wage Panel Data
+============================================================
+
+[1] Loading Data...
+Data: 1000 rows (2003 & 2007 only)
+Subgroups: High Pop vs Low Pop counties
+
+[2] Simple Pooled DiD...
+Pooled ATT: -0.0385
+This estimates the average effect across ALL counties.
+
+[3] Heterogeneous Treatment Effects (Split-Sample)...
+
+Results by Subgroup:
+------------------------------------------------------------
+Low Population : ATT = -0.0449 (SE: 0.1841) 
+High Population: ATT = -0.0465 (SE: 0.2086) 
+------------------------------------------------------------
+
+Difference (High - Low): -0.0016
+Does the policy affect large counties differently than small ones?
+
+============================================================
+[4] Using 'differences' Package for HTE
+============================================================
+Running Callaway-Sant'Anna by subgroup...
+Computing ATTgt for high_pop = 1 [workers=1]  0%|                    | 0/12 [00:00<?, ?it/s]Computing ATTgt for high_pop = 1 [workers=1]100%|████████████████████| 12/12 [00:00<00:00, 458.96it/s]
+Computing ATTgt for high_pop = 0 [workers=1]  0%|                    | 0/12 [00:00<?, ?it/s]Computing ATTgt for high_pop = 0 [workers=1]100%|████████████████████| 12/12 [00:00<00:00, 535.11it/s]
+
+ATT by population size (from 'differences' package):
+                                     ATTgtResult  ...                     
+                                                  ... pointwise conf. band
+                                             ATT  ...    zero_not_in_cband
+sample_name  cohort base_period time              ...                     
+high_pop = 1 2004   2003        2004   -0.006489  ...                     
+                                2005   -0.017320  ...                     
+                                2006   -0.072692  ...                    *
+                                2007   -0.074301  ...                    *
+             2006   2003        2004    0.003421  ...                     
+                    2004        2005   -0.007334  ...                     
+                    2005        2006    0.010206  ...                     
+                                2007   -0.034481  ...                     
+             2007   2003        2004    0.021545  ...                     
+                    2004        2005    0.005783  ...                     
+                    2005        2006   -0.028825  ...                     
+                    2006        2007   -0.044093  ...                    *
+high_pop = 0 2004   2003        2004   -0.018079  ...                     
+                                2005   -0.127798  ...                    *
+                                2006   -0.205018  ...                    *
+                                2007   -0.132879  ...                    *
+             2006   2003        2004   -0.008024  ...                     
+                    2004        2005    0.001712  ...                     
+                    2005        2006   -0.025927  ...                     
+                                2007   -0.061082  ...                     
+             2007   2003        2004    0.032322  ...                     
+                    2004        2005   -0.016154  ...                     
+                    2005        2006   -0.031029  ...                     
+                    2006        2007   -0.008665  ...                     
+
+[24 rows x 5 columns]
+
+Simple aggregation by subgroup:
+             SimpleAggregation            ...                                       
+                                analytic  ... pointwise conf. band                  
+                           ATT std_error  ...                upper zero_not_in_cband
+sample_name                               ...                                       
+high_pop = 1         -0.033809  0.009601  ...            -0.014991                 *
+high_pop = 0         -0.052751  0.023096  ...            -0.007483                 *
+
+[2 rows x 5 columns]
+
+============================================================
+[5] Creating Showcase Visualizations
+============================================================
+Saved: /Users/pranjal/Code/did_designs/05_hte/figs/hte_trends.png
+Saved: /Users/pranjal/Code/did_designs/05_hte/figs/hte_forest.png
+Saved: /Users/pranjal/Code/did_designs/05_hte/figs/hte_decomposition.png
+
+============================================================
+Module 05 Complete!
+============================================================

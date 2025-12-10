@@ -1,0 +1,117 @@
+============================================================
+Module 01: The Canonical 2x2 Design
+Card & Krueger (1994) - NJ/PA Minimum Wage Study
+============================================================
+
+[1] Loading Card & Krueger data...
+
+Dataset shape: (794, 7)
+
+Sample by group and time:
+post       0    1
+treated          
+0         77   77
+1        321  319
+
+============================================================
+[2] Manual DiD Calculation: The 'Four Numbers' Approach
+============================================================
+
+The Four Means:
+    μ(Control, Pre)  = 23.3312   [PA, Feb 1992]
+    μ(Control, Post) = 21.1656   [PA, Nov 1992]
+    μ(Treated, Pre)  = 20.4394   [NJ, Feb 1992]
+    μ(Treated, Post) = 21.0274   [NJ, Nov 1992]
+
+First Differences:
+    Δ Control (PA):  21.1656 - 23.3312 = -2.1656
+    Δ Treated (NJ):  21.0274 - 20.4394 = +0.5880
+
+Difference-in-Differences:
+    ATT = Δ Treated - Δ Control
+        = +0.5880 - (-2.1656)
+        = +2.7536
+    
+
+============================================================
+[3] OLS Regression Verification
+============================================================
+
+Regression Results (HC1 robust SEs):
+----------------------------------------
+Intercept (α):        23.3312
+Treated (β):          -2.8918
+Post (γ):             -2.1656
+Treated×Post (δ):     2.7536
+----------------------------------------
+
+============================================================
+[4] Verification: Manual = Regression
+============================================================
+
+Manual DiD ATT:     2.753606
+Regression δ:       2.753606
+Difference:         0.0000000000
+
+✓ VERIFIED: Manual calculation equals regression coefficient!
+
+============================================================
+[5] Interpretation
+============================================================
+
+The 2x2 DiD Table:
+                        Pre (Feb 1992)    Post (Nov 1992)    Change
+    Control (PA):       23.33             21.17              -2.17
+    Treatment (NJ):     20.44             21.03              +0.59
+    ────────────────────────────────────────────────────────────────
+    Diff-in-Diff:                                           +2.75
+
+Interpretation:
+    The minimum wage increase in New Jersey was associated with a
+    2.75 FTE increase in fast-food employment relative to
+    what would have occurred under the Pennsylvania trend.
+
+Key Assumption:
+    Parallel trends - absent the minimum wage increase, NJ employment
+    would have followed the same trajectory as PA employment.
+    
+
+============================================================
+[6] Creating The Ultimate DiD Visual
+============================================================
+Saved: /Users/pranjal/Code/did_designs/01_canonical_2x2/figs/did_showcase.png
+
+============================================================
+[7] Full Regression Output
+============================================================
+                            OLS Regression Results                            
+==============================================================================
+Dep. Variable:                    fte   R-squared:                       0.007
+Model:                            OLS   Adj. R-squared:                  0.004
+Method:                 Least Squares   F-statistic:                     1.404
+Date:                Wed, 10 Dec 2025   Prob (F-statistic):              0.240
+Time:                        15:47:34   Log-Likelihood:                -2904.2
+No. Observations:                 794   AIC:                             5816.
+Df Residuals:                     790   BIC:                             5835.
+Df Model:                           3                                         
+Covariance Type:                  HC1                                         
+================================================================================
+                   coef    std err          z      P>|z|      [0.025      0.975]
+--------------------------------------------------------------------------------
+Intercept       23.3312      1.346     17.337      0.000      20.694      25.969
+treated         -2.8918      1.439     -2.010      0.044      -5.712      -0.072
+post            -2.1656      1.641     -1.320      0.187      -5.382       1.051
+treated:post     2.7536      1.795      1.534      0.125      -0.765       6.273
+==============================================================================
+Omnibus:                      218.742   Durbin-Watson:                   1.840
+Prob(Omnibus):                  0.000   Jarque-Bera (JB):              804.488
+Skew:                           1.268   Prob(JB):                    2.03e-175
+Kurtosis:                       7.229   Cond. No.                         11.3
+==============================================================================
+
+Notes:
+[1] Standard Errors are heteroscedasticity robust (HC1)
+
+============================================================
+Module 01 Complete!
+============================================================

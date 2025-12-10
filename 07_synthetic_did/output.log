@@ -1,0 +1,36 @@
+======================================================================
+Module 07: Synthetic Difference-in-Differences
+California Proposition 99 (1988) - Tobacco Tax
+======================================================================
+
+[1] Loading Data...
+Pre-treatment: 19 years, Post-treatment: 12 years
+Control states: 38
+
+[2] Computing Estimates...
+
+Method Comparison:
+--------------------------------------------------
+  Method                 Estimate      Paper
+--------------------------------------------------
+  Naive DiD                -27.35      -27.3
+  SC (pysyncon)            -19.45      -19.6
+  SDID (manual)            -15.60      -15.6
+  SDID (synthdid)          -15.60      -15.6
+--------------------------------------------------
+Paper: Arkhangelsky et al. (2021) Table 1
+
+Top 5 Unit Weights:
+  Nevada         : 0.1242
+  New Hampshire  : 0.1046
+  Connecticut    : 0.0784
+  Delaware       : 0.0704
+  Colorado       : 0.0574
+
+[3] Generating Dashboard...
+Saved: /Users/pranjal/Code/did_designs/07_synthetic_did/figs/sdid_comparison.png
+Saved: /Users/pranjal/Code/did_designs/07_synthetic_did/figs/sdid_dashboard.png
+
+======================================================================
+Module 07 Complete!
+======================================================================

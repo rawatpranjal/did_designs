@@ -1,0 +1,138 @@
+============================================================
+Module 04: Covariates and Doubly Robust DiD
+LaLonde (1986) - NSW Job Training Program
+============================================================
+
+[1] Loading LaLonde data...
+Loaded LaLonde data: 614 observations
+  - Treated (NSW): 185
+  - Control (PSID): 429
+
+Dataset shape: (614, 11)
+Treated: 185
+Control: 429
+
+============================================================
+[2] The Selection Problem
+============================================================
+
+Mean characteristics by treatment status:
+--------------------------------------------------
+         Control  Treated
+age        28.03    25.82
+educ       10.24    10.35
+black       0.20     0.84
+hisp        0.14     0.06
+married     0.51     0.19
+re74     5619.24  2095.57
+re75     2466.48  1532.06
+re78     6984.17  6349.14
+
+Key observations:
+  - Treated have LOWER pre-treatment earnings (re74, re75)
+  - Treated are younger, less educated, more likely Black
+  - This is SELECTION BIAS: workers who seek training are different
+    
+
+============================================================
+[3] Naive DiD (Without Adjustment)
+============================================================
+
+Treated: Change in earnings = $4,817
+Control: Change in earnings = $4,518
+
+Naive DiD ATT = $299
+
+============================================================
+[4] Propensity Score Estimation
+============================================================
+
+Propensity score summary:
+  Treated: mean=0.570, min=0.031, max=0.807
+  Control: mean=0.186, min=0.010, max=0.783
+
+============================================================
+[5] IPW (Inverse Probability Weighting) DiD
+============================================================
+
+IPW DiD ATT = $1,246
+
+Interpretation: Reweight controls to match treated on observables.
+
+============================================================
+[6] Outcome Regression DiD
+============================================================
+
+Outcome Regression ATT = $1,692
+
+Interpretation: Predict counterfactual change using control model.
+
+============================================================
+[7] Doubly Robust DiD
+============================================================
+
+Doubly Robust ATT = $1,261
+
+Interpretation: Combines IPW and OR for robustness.
+Consistent if EITHER propensity OR outcome model is correct.
+
+============================================================
+[8] Comparison of All Methods
+============================================================
+
+--------------------------------------------------
+Method                       ATT Estimate
+--------------------------------------------------
+Naive DiD                 $           299
+IPW DiD                   $         1,246
+Outcome Regression        $         1,692
+Doubly Robust             $         1,261
+--------------------------------------------------
+
+============================================================
+[9] Creating Visualizations
+============================================================
+Saved: /Users/pranjal/Code/did_designs/04_covariates_dr/figs/pscore_overlap.png
+Saved: /Users/pranjal/Code/did_designs/04_covariates_dr/figs/earnings_trends_dip.png
+Saved: /Users/pranjal/Code/did_designs/04_covariates_dr/figs/results_comparison.png
+
+============================================================
+[10] Interpretation
+============================================================
+
+RESULTS SUMMARY
+===============
+
+The Problem:
+    Job training participants have LOWER pre-treatment earnings
+    and different trends than the general population (selection bias).
+
+Naive DiD Result: $299
+    WRONG SIGN! Suggests training hurts earnings.
+    This happens because control units have higher baseline earnings
+    and stable trends, while treated have "dipping" pre-trends.
+
+Covariate-Adjusted Results:
+    IPW:            $1,246
+    Outcome Reg:    $1,692
+    Doubly Robust:  $1,261
+
+    All positive, suggesting training HELPS earnings (correct direction).
+
+KEY INSIGHTS:
+    1. Simple DiD requires UNCONDITIONAL parallel trends
+    2. When groups differ systematically, adjust for covariates
+    3. IPW reweights controls to look like treated
+    4. Outcome regression predicts counterfactual directly
+    5. Doubly robust combines both for insurance
+
+RECOMMENDATION:
+    Use Doubly Robust when:
+    - Treatment is non-random
+    - Groups have different baseline characteristics
+    - You want protection against model misspecification
+    
+
+============================================================
+Module 04 Complete!
+============================================================
