@@ -96,7 +96,25 @@ Common aggregations:
 
 ## 6. Results & Visualization
 
-### The $ATT(g,t)$ Matrix
+### 1. The Spaghetti Plot (Raw Data)
+Visualizing the complexity of staggered adoption. Different counties get treated at different times (2004, 2006, 2007), making a simple "Pre vs Post" comparison impossible.
+
+![Raw Trends by Cohort](figs/raw_trends_by_cohort.png)
+
+### 2. The $ATT(g,t)$ Matrix
+This heatmap reveals the "internal machinery" of the Callaway-Sant'Anna estimator.
+*   **Rows:** Treatment Cohorts ($g$)
+*   **Columns:** Calendar Years ($t$)
+*   **Cells:** The estimated effect for that specific group at that specific time.
+*   **Insight:** We only estimate effects for $t \ge g$ (Post-treatment).
+
+![ATT(g,t) Matrix](figs/att_gt_matrix.png)
+
+### 3. Aggregated Event Study
+We average the matrix diagonally to get a single "Event Time" plot.
+*   **Result:** The minimum wage effect hovers near zero (or slightly negative), but is not statistically significant.
+
+![Staggered Event Study](figs/staggered_event_study.png)
 
 |        | 2004 | 2005 | 2006 | 2007 |
 |--------|------|------|------|------|

@@ -91,11 +91,28 @@ Source: [MatchIt R package via Rdatasets](https://vincentarelbundock.github.io/R
 
 ## 6. Results & Visualization
 
-### Propensity Score Distribution
+### 1. The Ashenfelter Dip (Why Naive DiD Fails)
+This plot shows the raw earnings trends.
+*   **The Dip:** Notice the sharp drop in the Treated group's earnings (Blue line) *just before* the program starts (1975).
+*   **Implication:** The "Parallel Trends" assumption is violated. Comparing 1975 to 1978 would mistakenly attribute the "rebound" from this dip to the program.
 
-![Propensity Scores](figs/propensity_scores.png)
+![Earnings Trends](figs/earnings_trends_dip.png)
 
-Good overlap means we can find comparable control units.
+### 2. Propensity Score Overlap
+To fix the bias, we need to find control units that look like the treated units.
+*   **Top (Red):** Propensity scores of Trainees.
+*   **Bottom (Blue):** Propensity scores of Controls (inverted).
+*   **Overlap:** We see good overlap in the middle, meaning we can successfully reweight the control group.
+
+![Propensity Score Overlap](figs/pscore_overlap.png)
+
+### 3. Method Comparison
+The ultimate proof of value.
+*   **Naive DiD:** Estimates a **negative** effect (Training hurts earnings).
+*   **Doubly Robust:** Estimates a **positive** effect (Training helps earnings).
+*   **Conclusion:** Adjusting for covariates flips the sign of the result!
+
+![Results Comparison](figs/results_comparison.png)
 
 ### Comparison of Methods
 

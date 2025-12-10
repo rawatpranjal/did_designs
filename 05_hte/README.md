@@ -40,10 +40,26 @@ We use the Minimum Wage dataset again, but we stratify counties by **population 
 
 ## 5. Results & Visualization
 
-### HTE Forest Plot
+### 1. Subgroup Trends
+We plot the raw trends separately for High Population and Low Population counties.
+*   **Visual Check:** Do the trends look parallel in the pre-period (2003-2004) for both groups?
+*   **Mechanism:** This helps us see *why* the effect might differ.
+
+![HTE Trends](figs/hte_trends.png)
+
+### 2. HTE Forest Plot
 This is the standard way to visualize heterogeneity. It shows the ATT for each subgroup relative to the overall pooled effect.
+*   **Pooled ATT:** The dashed line shows the effect if we ignored heterogeneity.
+*   **Subgroup ATTs:** The dots show the specific effects. Overlapping confidence intervals suggest no significant difference.
 
 ![HTE Forest Plot](figs/hte_forest.png)
+
+### 3. Decomposition (Triple Difference)
+We explicitly calculate the difference between the two subgroups ($ATT_{High} - ATT_{Low}$).
+*   **Result:** The difference is very small (near zero).
+*   **Conclusion:** We do not find evidence that the minimum wage affects large and small counties differently.
+
+![HTE Decomposition](figs/hte_decomposition.png)
 
 ### Interpretation
 *   **Pooled ATT:** The dashed line shows the effect if we ignored heterogeneity.

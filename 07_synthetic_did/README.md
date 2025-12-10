@@ -74,9 +74,21 @@ Paper: Arkhangelsky et al. (2021) Table 1.
 
 ### Visualization
 
+### 1. Synthetic vs. Real Trends (The "Hero" Plot)
+*   **Blue Line:** Actual California cigarette sales.
+*   **Red Line:** "Synthetic California" (a weighted average of other states).
+*   **Pre-1989:** The red line tracks the blue line perfectly. This validates the method.
+*   **Post-1989:** The gap represents the causal effect of Prop 99.
+
 ![SDID Dashboard](figs/sdid_dashboard.png)
 
-The red line (Synthetic Control with Intercept) tracks California perfectly before 1989, making the divergence after 1989 a credible estimate of the effect.
+### 2. The Performance Contest
+Comparing the three major methods.
+*   **Naive DiD:** Overestimates the effect (too negative) because control states were already declining faster than CA.
+*   **Synthetic Control:** Improves the estimate.
+*   **SDID:** Provides the most robust estimate by combining reweighting with fixed effects.
+
+![SDID Comparison](figs/sdid_comparison.png)
 
 ## 5. Key Insights
 

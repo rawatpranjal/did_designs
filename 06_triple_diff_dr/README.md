@@ -43,10 +43,28 @@ We use the **Meyer, Viscusi, & Durbin (1995)** worker's compensation dataset.
 
 ## 5. Visualizations
 
-### Covariate Imbalance
-The root cause of the bias: The placebo group looks nothing like the target group.
+### 1. Covariate Imbalance
+The root cause of the bias: The placebo group (Low Earners) looks nothing like the target group (High Earners).
+*   **Age:** High earners are older.
+*   **Marriage:** High earners are much more likely to be married.
+*   **Implication:** If age/marriage affect injury duration trends, the placebo group is a bad counterfactual.
 
 ![Imbalance](figs/covariate_imbalance.png)
+
+### 2. Decomposition of the Robust Estimator
+How the "Target-Adjusted" DDD is constructed.
+*   It calculates the trend for each of the 4 groups (KY High, KY Low, MI High, MI Low).
+*   Crucially, these trends are predicted **at the Target Group's covariate values**.
+
+![DDD Decomposition](figs/ddd_decomposition.png)
+
+### 3. Bias Comparison
+The final verdict.
+*   **Naive DDD:** Estimates a small positive effect.
+*   **Robust DDD:** Estimates a large negative effect.
+*   **Takeaway:** The naive method masked the true effect because it failed to account for the fact that high earners (who are older/married) have different baseline trends than low earners.
+
+![DDD Comparison](figs/ddd_comparison.png)
 
 ### Robust Decomposition
 This shows the trends *after* adjusting everyone to look like the Target Group.

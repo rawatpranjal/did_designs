@@ -85,6 +85,20 @@ Create an event study plot with:
 
 ## 6. Results & Visualization
 
+### 1. Raw Trends
+Before running any regression, we simply plot the average cigarette sales for California vs. the Control States.
+*   **Observation:** Trends look very similar before 1988 (Parallel Trends plausible).
+*   **Divergence:** After 1988, California drops significantly faster.
+
+![Raw Trends](figs/raw_trends.png)
+
+### 2. The Event Study (Dynamic Effects)
+This plot shows the estimated $ATT(t)$ for each year, relative to 1987 ($t=-1$).
+*   **Pre-Trends (Left of 0):** Coefficients hover near zero. This confirms the parallel trends assumption.
+*   **Post-Treatment (Right of 0):** Coefficients become negative and the magnitude increases over time.
+
+![Event Study Showcase](figs/event_study_showcase.png)
+
 ### Pre-Trends Test
 
 Coefficients for years before 1988 should be:

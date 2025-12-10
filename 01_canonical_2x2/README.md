@@ -84,6 +84,11 @@ The coefficient $\delta$ is **numerically identical** to our manual calculation.
 
 ## 6. Results & Visualization
 
+### The Counterfactual Wedge
+This chart visualizes the core logic of DiD. The dashed red line represents the **counterfactual**: what would have happened to New Jersey if it had followed Pennsylvania's trend. The green arrow is the **ATT**.
+
+![DiD Showcase](figs/did_showcase.png)
+
 ### The 2x2 Table
 
 |           | Pre (Feb 1992) | Post (Nov 1992) | Change |
