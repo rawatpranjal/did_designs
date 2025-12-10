@@ -12,7 +12,7 @@ We want to estimate the causal effect of a policy that affects one group at one 
 
 The Average Treatment Effect on the Treated (ATT) is:
 
-$$\widehat{ATT} = \underbrace{(\bar{y}_{NJ, Post} - \bar{y}_{NJ, Pre})}_{\text{Change in Treated}} - \underbrace{(\bar{y}_{PA, Post} - \bar{y}_{PA, Pre})}_{\text{Change in Control}}$$
+$$\widehat{\text{ATT}} = \underbrace{(\bar{y}_{\text{NJ}, \text{Post}} - \bar{y}_{\text{NJ}, \text{Pre}})}_{\text{Change in Treated}} - \underbrace{(\bar{y}_{\text{PA}, \text{Post}} - \bar{y}_{\text{PA}, \text{Pre}})}_{\text{Change in Control}}$$
 
 Where $\bar{y}$ represents the sample mean for that group and time period.
 

@@ -19,9 +19,9 @@ Why? The naive DDD integrates counterfactual trends over the **wrong population*
 We use a "Target-Adjusted" estimator. Instead of 2 simple DiDs, we model the outcome for all groups and predict what their trends *would be* if they had the characteristics of the Target Group.
 
 **Formula:**
-$ \widehat{DDD}_{OR} = (\bar{Y}_{T} - \hat{Y}_{T}^{CF1}) - (\hat{Y}_{T}^{CF2} - \hat{Y}_{T}^{CF3}) $
+$ \widehat{\text{DDD}}_{\text{OR}} = (\bar{Y}_{T} - \hat{Y}_{T}^{\text{CF}1}) - (\hat{Y}_{T}^{\text{CF}2} - \hat{Y}_{T}^{\text{CF}3}) $
 
-Where all $\hat{Y}$ are predicted outcomes evaluated at the Target Group's covariate values ($X_{Target}$).
+Where all $\hat{Y}$ are predicted outcomes evaluated at the Target Group's covariate values ($X_{\text{Target}}$).
 
 ## 3. The Data
 

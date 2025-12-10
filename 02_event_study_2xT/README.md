@@ -14,9 +14,9 @@ This requires extending from 2 periods to T periods.
 
 For each time period $t$, we estimate:
 
-$$ATT(t) = E[Y_t - Y_{ref} | D=1] - E[Y_t - Y_{ref} | D=0]$$
+$$\text{ATT}(t) = \mathbb{E}[Y_t - Y_{\text{ref}} | D=1] - \mathbb{E}[Y_t - Y_{\text{ref}} | D=0]$$
 
-where $ref$ is the reference period (typically $t = g-1$, the period just before treatment).
+where $\text{ref}$ is the reference period (typically $t = g-1$, the period just before treatment).
 
 **Key insight:** Each coefficient is a 2×2 DiD comparing period $t$ to the reference period.
 

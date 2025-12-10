@@ -14,14 +14,14 @@ Standard Two-Way Fixed Effects (TWFE) regression fails when:
 
 We want Group-Time Average Treatment Effects:
 
-$$ATT(g,t) = E[Y_t(1) - Y_t(0) | G = g]$$
+$$\text{ATT}(g,t) = \mathbb{E}[Y_t(1) - Y_t(0) | G = g]$$
 
 where:
 - $g$ = treatment cohort (year group was first treated)
 - $t$ = calendar time
 - $G = g$ means "units first treated in year $g$"
 
-**Building Block:** Each $ATT(g,t)$ is a 2×2 comparison:
+**Building Block:** Each $\text{ATT}(g,t)$ is a 2×2 comparison:
 - Treated: Cohort $g$
 - Control: Not-yet-treated units at time $t$
 - Pre: Year $g-1$ (baseline)

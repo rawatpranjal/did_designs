@@ -30,19 +30,19 @@ Synthetic_CA = 0.3 × Utah + 0.2 × Nevada + ...
 
 The SDID estimator is:
 
-$$\hat{\tau}_{sdid} = (\bar{Y}_{T,Post} - \bar{Y}^{\lambda}_{T,Pre}) - (\bar{Y}^{\omega}_{C,Post} - \bar{Y}^{\omega,\lambda}_{C,Pre})$$
+$$\hat{\tau}_{\text{SDID}} = (\bar{Y}_{T,\text{Post}} - \bar{Y}^{\lambda}_{T,\text{Pre}}) - (\bar{Y}^{\omega}_{C,\text{Post}} - \bar{Y}^{\omega,\lambda}_{C,\text{Pre}})$$
 
 where:
-- $\bar{Y}_{T,Post}$ = Treated unit, post-treatment (simple mean)
-- $\bar{Y}^{\lambda}_{T,Pre}$ = Treated unit, pre-treatment (time-weighted)
-- $\bar{Y}^{\omega}_{C,Post}$ = Control units, post-treatment (unit-weighted)
-- $\bar{Y}^{\omega,\lambda}_{C,Pre}$ = Control units, pre-treatment (doubly weighted)
+- $\bar{Y}_{T,\text{Post}}$ = Treated unit, post-treatment (simple mean)
+- $\bar{Y}^{\lambda}_{T,\text{Pre}}$ = Treated unit, pre-treatment (time-weighted)
+- $\bar{Y}^{\omega}_{C,\text{Post}}$ = Control units, post-treatment (unit-weighted)
+- $\bar{Y}^{\omega,\lambda}_{C,\text{Pre}}$ = Control units, pre-treatment (doubly weighted)
 
 ### Unit Weights (ω)
 
 Find ω such that the synthetic control matches the treated unit's pre-trend:
 
-$$\min_{\omega} \|Y_{T,pre} - \omega_0 - Y_{C,pre}\omega\|^2 + \zeta^2 T_{pre} \|\omega\|^2_2$$
+$$\min_{\omega} \|Y_{T,\text{pre}} - \omega_0 - Y_{C,\text{pre}}\omega\|^2 + \zeta^2 T_{\text{pre}} \|\omega\|^2_2$$
 
 ### Time Weights (λ)
 

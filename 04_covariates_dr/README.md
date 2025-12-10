@@ -19,17 +19,17 @@ Without adjustment, simple DiD gives **biased** (often wrong-sign) estimates.
 
 The **Conditional** Average Treatment Effect on the Treated:
 
-$$ATT = E[\tau | D=1] = E[Y_1(1) - Y_1(0) | D=1]$$
+$$\text{ATT} = \mathbb{E}[\tau | D=1] = \mathbb{E}[Y_1(1) - Y_1(0) | D=1]$$
 
 where we assume parallel trends holds **conditional on covariates X**:
 
-$$E[Y_1(0) - Y_0(0) | D=1, X] = E[Y_1(0) - Y_0(0) | D=0, X]$$
+$$\mathbb{E}[Y_1(0) - Y_0(0) | D=1, X] = \mathbb{E}[Y_1(0) - Y_0(0) | D=0, X]$$
 
 ## 3. Assumptions
 
 The formal identification assumptions for doubly robust DiD (LaLonde job training):
 
-1. **Conditional Parallel Trends:** Parallel trends holds **only** after conditioning on covariates $X$: $E[\Delta Y(0) | D=1, X] = E[\Delta Y(0) | D=0, X]$.
+1. **Conditional Parallel Trends:** Parallel trends holds **only** after conditioning on covariates $X$: $\mathbb{E}[\Delta Y(0) | D=1, X] = \mathbb{E}[\Delta Y(0) | D=0, X]$.
    - *Intuition:* Trainees and Non-Trainees have parallel earnings trends *only if* we compare people with the same age, education, and 1974 earnings.
    - *Note:* Comparing raw means creates bias; comparing workers with the same covariates removes bias.
 

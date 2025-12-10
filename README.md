@@ -13,7 +13,7 @@ Implementations of modern DiD estimators following Baker, Callaway, Cunningham, 
 | $D_i$ | Treatment indicator (1 = treated) |
 | $G_i$ or $g$ | Treatment cohort (year first treated) |
 | $\bar{y}_{T,t}$, $\bar{y}_{C,t}$ | Sample means for Treated/Control at time $t$ |
-| $ATT$ | Average Treatment Effect on the Treated |
+| $\text{ATT}$ | Average Treatment Effect on the Treated |
 | $\mu_i$, $\lambda_t$ | Unit and time fixed effects |
 | $\hat{p}(X)$ | Propensity score |
 | $\omega_i$, $\lambda_t$ | Unit weights, time weights (SDID) |
@@ -24,13 +24,13 @@ Implementations of modern DiD estimators following Baker, Callaway, Cunningham, 
 Card & Krueger (1994) — NJ/PA Minimum Wage
 
 **Estimator:**
-$$\hat{\delta}_{2\times2} = (\bar{y}_{T,post} - \bar{y}_{T,pre}) - (\bar{y}_{C,post} - \bar{y}_{C,pre})$$
+$$\hat{\delta}_{2\times2} = (\bar{y}_{T,\text{post}} - \bar{y}_{T,\text{pre}}) - (\bar{y}_{C,\text{post}} - \bar{y}_{C,\text{pre}})$$
 
 **Regression:**
-$$Y_{it} = \alpha + \beta \text{Treat}_i + \gamma \text{Post}_t + \delta_{DiD} (\text{Treat}_i \times \text{Post}_t) + \varepsilon_{it}$$
+$$Y_{it} = \alpha + \beta \text{Treat}_i + \gamma \text{Post}_t + \delta_{\text{DiD}} (\text{Treat}_i \times \text{Post}_t) + \varepsilon_{it}$$
 
 **Estimand:**
-$$ATT = \underbrace{(\mathbb{E}[Y_{2}|D=1] - \mathbb{E}[Y_{1}|D=1])}_{\text{Actual Path}} - \underbrace{(\mathbb{E}[Y_{2}|D=0] - \mathbb{E}[Y_{1}|D=0])}_{\text{Counterfactual Trend}}$$
+$$\text{ATT} = \underbrace{(\mathbb{E}[Y_{2}|D=1] - \mathbb{E}[Y_{1}|D=1])}_{\text{Actual Path}} - \underbrace{(\mathbb{E}[Y_{2}|D=0] - \mathbb{E}[Y_{1}|D=0])}_{\text{Counterfactual Trend}}$$
 
 ![](01_canonical_2x2/figs/did_showcase.png)
 
@@ -44,13 +44,13 @@ Static 2x2 design. Manual calculation vs. OLS verification.
 California Prop 99 (1988) — Tobacco Tax
 
 **Estimator:**
-$$Y_{it} = \mu_i + \lambda_t + \sum_{k \neq -1} \delta_k \cdot \mathbf{1}\{t - T_i = k\} + \varepsilon_{it}$$
+$$Y_{it} = \mu_i + \lambda_t + \sum_{k \neq -1} \delta_k \cdot \mathbb{1}\{t - T_i = k\} + \varepsilon_{it}$$
 
 **Regression:**
-$$Y_{it} = \mu_i + \lambda_t + \sum_{k \neq -1} \beta_k \cdot \mathbb{1}\{t - T_{treat} = k\} + \varepsilon_{it}$$
+$$Y_{it} = \mu_i + \lambda_t + \sum_{k \neq -1} \beta_k \cdot \mathbb{1}\{t - T_{\text{treat}} = k\} + \varepsilon_{it}$$
 
 **Estimand:**
-$$ATT(t) = \mathbb{E}[Y_{t} - Y_{g-1} \mid D=1] - \mathbb{E}[Y_{t} - Y_{g-1} \mid D=0]$$
+$$\text{ATT}(t) = \mathbb{E}[Y_{t} - Y_{g-1} \mid D=1] - \mathbb{E}[Y_{t} - Y_{g-1} \mid D=0]$$
 
 ![](02_event_study_2xT/figs/event_study_showcase.png)
 
@@ -64,13 +64,13 @@ Dynamic treatment effects with pre-trend testing. Reference period normalized to
 mpdta — US Counties Minimum Wage (2003-2007)
 
 **Estimator (Callaway-Sant'Anna):**
-$$ATT(g,t) = \mathbb{E}[Y_t - Y_{g-1} \mid G=g] - \mathbb{E}[Y_t - Y_{g-1} \mid C=NYT]$$
+$$\text{ATT}(g,t) = \mathbb{E}[Y_t - Y_{g-1} \mid G=g] - \mathbb{E}[Y_t - Y_{g-1} \mid C=\text{NYT}]$$
 
 **Regression (Saturated):**
-$$Y_{it} = \mu_i + \lambda_t + \sum_{g} \sum_{t} \tau_{g,t} \cdot \mathbb{1}\{G_i = g\} \cdot \mathbb{1}\{Period = t\} + \varepsilon_{it}$$
+$$Y_{it} = \mu_i + \lambda_t + \sum_{g} \sum_{t} \tau_{g,t} \cdot \mathbb{1}\{G_i = g\} \cdot \mathbb{1}\{\text{Period} = t\} + \varepsilon_{it}$$
 
 **Estimand:**
-$$ATT(g,t) = \mathbb{E}[Y_{t} - Y_{g-1} \mid G=g] - \mathbb{E}[Y_{t} - Y_{g-1} \mid G \in \mathcal{C}_{NYT}]$$
+$$\text{ATT}(g,t) = \mathbb{E}[Y_{t} - Y_{g-1} \mid G=g] - \mathbb{E}[Y_{t} - Y_{g-1} \mid G \in \mathcal{C}_{\text{NYT}}]$$
 
 ![](03_staggered_GxT/figs/staggered_event_study.png)
 
@@ -84,13 +84,13 @@ Callaway & Sant'Anna ATT(g,t) aggregation. Not-yet-treated as controls.
 LaLonde (1986) — NSW Job Training
 
 **Estimator (Sant'Anna & Zhao 2020):**
-$$\hat{\tau}^{DR} = \frac{1}{N_{tr}} \sum_{i} \left( \frac{D_i(Y_i - \hat{\mu}_{0,i})}{\hat{p}} - \frac{(1-D_i)\hat{p}(X_i)(Y_i - \hat{\mu}_{0,i})}{(1-\hat{p}(X_i))\hat{p}} \right)$$
+$$\hat{\tau}^{\text{DR}} = \frac{1}{N_{tr}} \sum_{i} \left( \frac{D_i(Y_i - \hat{\mu}_{0,i})}{\hat{p}} - \frac{(1-D_i)\hat{p}(X_i)(Y_i - \hat{\mu}_{0,i})}{(1-\hat{p}(X_i))\hat{p}} \right)$$
 
 **Regression (Weighted):**
 $$\Delta Y_i = \alpha + \mathbf{X}_i'\beta + \varepsilon_i \quad \text{weighted by } w_i = \frac{D_i + (1-D_i)\hat{p}(X_i)}{1-\hat{p}(X_i)}$$
 
 **Estimand:**
-$$ATT = \mathbb{E}[\Delta Y \mid D=1] - \mathbb{E}\big[ \mathbb{E}[\Delta Y \mid X, D=0] \big| D=1 \big]$$
+$$\text{ATT} = \mathbb{E}[\Delta Y \mid D=1] - \mathbb{E}\big[ \mathbb{E}[\Delta Y \mid X, D=0] \big| D=1 \big]$$
 
 ![](04_covariates_dr/figs/results_comparison.png)
 
@@ -104,13 +104,13 @@ IPW, outcome regression, and DR estimation for conditional parallel trends.
 mpdta — US Counties by Population Size
 
 **Estimator:**
-$$\widehat{ATT}(x) = (\bar{y}_{T,post|x} - \bar{y}_{T,pre|x}) - (\bar{y}_{C,post|x} - \bar{y}_{C,pre|x})$$
+$$\widehat{\text{ATT}}(x) = (\bar{y}_{T,\text{post}|x} - \bar{y}_{T,\text{pre}|x}) - (\bar{y}_{C,\text{post}|x} - \bar{y}_{C,\text{pre}|x})$$
 
 **Regression:**
 $$Y_{it} = \mu_i + \lambda_t + \delta D_{it} + \eta (D_{it} \times \text{Subgroup}_i) + \varepsilon_{it}$$
 
 **Estimand:**
-$$ATT(x) = \mathbb{E}[Y_{post} - Y_{pre} \mid D=1, X=x] - \mathbb{E}[Y_{post} - Y_{pre} \mid D=0, X=x]$$
+$$\text{ATT}(x) = \mathbb{E}[Y_{\text{post}} - Y_{\text{pre}} \mid D=1, X=x] - \mathbb{E}[Y_{\text{post}} - Y_{\text{pre}} \mid D=0, X=x]$$
 
 ![](05_hte/figs/hte_forest.png)
 
@@ -124,13 +124,13 @@ Split-sample DiD for subgroup analysis. Forest plot visualization of heterogenei
 Meyer, Viscusi, & Durbin (1995) — Worker's Compensation
 
 **Estimator (Target-Adjusted OR):**
-$$\hat{\tau}^{DDD}_{OR} = \bar{Y}_{T,Target} - \frac{1}{N_{T,Target}} \sum_{i \in T,Target} \hat{\mu}_{0}(X_i)$$
+$$\hat{\tau}^{\text{DDD}}_{\text{OR}} = \bar{Y}_{T,\text{Target}} - \frac{1}{N_{T,\text{Target}}} \sum_{i \in T,\text{Target}} \hat{\mu}_{0}(X_i)$$
 
 **Regression (Cell-Specific):**
 $$Y_{i} = \alpha + \mathbf{X}_i'\beta_{s,g,t} + \varepsilon_{i} \quad \text{for each state } s, \text{ group } g, \text{ time } t$$
 
 **Estimand:**
-$$ATT(g,t) = \mathbb{E}[\Delta Y_{Target}^{Treat}] - \mathbb{E}\big[ \mathbb{E}[\Delta Y \mid X, S \in \mathcal{C}] \mid S=g, Q=1 \big]$$
+$$\text{ATT}(g,t) = \mathbb{E}[\Delta Y_{\text{Target}}^{\text{Treat}}] - \mathbb{E}\big[ \mathbb{E}[\Delta Y \mid X, S \in \mathcal{C}] \mid S=g, Q=1 \big]$$
 
 ![](06_triple_diff_dr/figs/ddd_decomposition.png)
 
@@ -144,13 +144,13 @@ DR-DDD following Ortiz-Villavicencio & Sant'Anna (2025). Corrects for covariate 
 California Prop 99 (1988) — Tobacco Tax
 
 **Estimator:**
-$$\hat{\tau}^{sdid} = (\bar{Y}_{T,post} - \sum_{t} \hat{\lambda}_t Y_{T,t}) - (\sum_{i} \hat{\omega}_i Y_{i,post} - \sum_{i,t} \hat{\omega}_i \hat{\lambda}_t Y_{i,t})$$
+$$\hat{\tau}^{\text{SDID}} = (\bar{Y}_{T,\text{post}} - \sum_{t} \hat{\lambda}_t Y_{T,t}) - (\sum_{i} \hat{\omega}_i Y_{i,\text{post}} - \sum_{i,t} \hat{\omega}_i \hat{\lambda}_t Y_{i,t})$$
 
 **Regression (Weighted TWFE):**
 $$(\hat{\tau}, \hat{\alpha}, \hat{\beta}) = \operatorname*{argmin}_{\tau, \alpha, \beta} \sum_{i=1}^N \sum_{t=1}^T \hat{\omega}_i \hat{\lambda}_t \left( Y_{it} - \alpha_i - \beta_t - \tau D_{it} \right)^2$$
 
 **Estimand:**
-$$\hat{\tau}^{sdid} = \left( \bar{Y}_{1}^{post} - \sum_{t} \hat{\lambda}_t Y_{1,t} \right) - \left( \sum_{i} \hat{\omega}_i Y_{i}^{post} - \sum_{i,t} \hat{\omega}_i \hat{\lambda}_t Y_{i,t} \right)$$
+$$\hat{\tau}^{\text{SDID}} = \left( \bar{Y}_{1}^{\text{post}} - \sum_{t} \hat{\lambda}_t Y_{1,t} \right) - \left( \sum_{i} \hat{\omega}_i Y_{i}^{\text{post}} - \sum_{i,t} \hat{\omega}_i \hat{\lambda}_t Y_{i,t} \right)$$
 
 | |
 |:--:|

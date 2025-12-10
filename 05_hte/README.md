@@ -17,7 +17,7 @@ Ignoring heterogeneity can mask important distributional consequences of a polic
 
 Instead of one single $\delta$, we want to estimate the ATT for specific subgroups $g$:
 
-$$ATT_g = E[Y(1) - Y(0) | D=1, Group=g]$$
+$$\text{ATT}_g = \mathbb{E}[Y(1) - Y(0) | D=1, \text{Group}=g]$$
 
 We define these subgroups based on baseline characteristics (covariates) determined *before* the treatment occurs.
 
@@ -25,9 +25,9 @@ We define these subgroups based on baseline characteristics (covariates) determi
 
 The most robust and transparent way to estimate HTE is simply to **split the sample** and run the DiD analysis separately for each subgroup.
 
-1.  **Define Subgroups:** Split the data into $D_{High}$ and $D_{Low}$ based on a covariate $X$ (e.g., population size).
+1.  **Define Subgroups:** Split the data into $D_{\text{High}}$ and $D_{\text{Low}}$ based on a covariate $X$ (e.g., population size).
 2.  **Estimate:** Run `calculate_2x2_did` separately for each dataframe.
-3.  **Compare:** Calculate the difference $\Delta = \widehat{ATT}_{High} - \widehat{ATT}_{Low}$.
+3.  **Compare:** Calculate the difference $\Delta = \widehat{\text{ATT}}_{\text{High}} - \widehat{\text{ATT}}_{\text{Low}}$.
 4.  **Test:** Check if the confidence intervals overlap or perform a formal t-test on the difference.
 
 ## 4. The Data (mpdta)
