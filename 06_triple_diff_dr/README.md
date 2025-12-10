@@ -1,0 +1,146 @@
+# Module 06: Triple Differences - The Robust Way
+
+> "The 'folk wisdom' that DDD = DiD_target - DiD_placebo is wrong when covariates matter."
+
+## 1. The Problem
+
+You want to study the effect of a policy (e.g., **Maternity Mandates**) on a specific group (**Women**) in treated states. You're worried that treated states might experience economic shocks affecting everyone, so you use **Men** as a within-state placebo group.
+
+### The Naive Approach
+
+Run a regression with a triple interaction:
+```
+Y ~ Treat × Post × Female + controls
+```
+
+Or calculate:
+```
+DDD = DiD_women - DiD_men
+```
+
+### The Trap (Ortiz-Villavicencio & Sant'Anna 2025)
+
+**If trends depend on covariates (e.g., Education) and the covariate distribution differs between Men and Women, the naive method fails.**
+
+Why? The naive DDD integrates counterfactual trends over the **wrong population**. When you compute DiD_men, you're using the covariate distribution of men. But to construct a valid counterfactual for women, you need to predict what would have happened to women—using the covariate distribution of women.
+
+## 2. The Key Insight
+
+Instead of 2 DiDs, the robust estimator uses **3 distinct comparisons**, all evaluated at the covariate distribution of the target group:
+
+1. **Observed change** for target group (women in treated states)
+2. **Counterfactual 1:** What if they were men in treated states? (removes gender-specific policy effect)
+3. **Counterfactual 2:** What if they were women in control states? (removes state-specific shock)
+4. **Counterfactual 3:** What if they were men in control states? (baseline trend)
+
+The formula:
+```
+DR-DDD = (Observed - CF_men_treat) - (CF_women_ctrl - CF_men_ctrl)
+```
+
+All counterfactuals are predicted **at the covariate distribution of the target group**.
+
+## 3. Assumptions
+
+The formal identification assumptions for triple differences (DDD):
+
+1. **Parallel Trends in Differences:** The *difference* between the Target Group and Placebo Group in the Treated State would have followed the same trend as the *difference* in the Control State, absent the policy.
+   - $(Y_{Target} - Y_{Placebo})^{Treat} \parallel (Y_{Target} - Y_{Placebo})^{Control}$
+   - *Intuition:* The Women-Men wage gap in the Treated State would have evolved like the Women-Men gap in the Control State.
+
+2. **No Concurrent Shocks:** There is no unobserved shock that affects *specifically* the Target Group in the Treated State at time $t$.
+   - *Intuition:* Shocks affecting *everyone* in the Treated State are fine (differenced out). Shocks affecting *Women* everywhere are fine (differenced out). But shocks hitting *only Women in the Treated State* violate this assumption.
+
+3. **SUTVA (No Within-Unit Spillovers):** The treatment of the Target Group does not spill over to the Placebo Group.
+   - *Intuition:* If maternity mandates lower women's wages, they shouldn't mechanically raise men's wages in the same firm. Men's outcomes must be unaffected by the policy targeting women.
+
+## 4. The Data
+
+We simulate a maternity mandates scenario:
+
+| Variable | Description |
+|----------|-------------|
+| `state_treat` | 1 if treated state, 0 if control |
+| `is_female` | 1 if woman (target), 0 if man (placebo) |
+| `post` | 1 if post-policy, 0 if pre-policy |
+| `X` | Covariate (e.g., Education: High/Low) |
+| `y` | Outcome (e.g., employment) |
+
+**The twist:** Education affects wage trends, AND women in treated states happen to be more highly educated than men. This imbalance breaks the parallel trends assumption unless you adjust.
+
+## 5. The Solution (Forward-Engineering)
+
+### Step 1: Naive DDD (Biased)
+
+```python
+# Standard 3-way fixed effects
+model = smf.ols("y ~ state_treat * is_female * post + X", data=df)
+naive_att = model.fit().params['state_treat:is_female:post']
+```
+
+This is biased because it doesn't account for covariate imbalance between men and women.
+
+### Step 2: Doubly Robust DDD (Correct)
+
+```python
+# 1. Fit outcome models for each comparison group
+model_men_ctrl = smf.ols("dy ~ X", data=df[(S==0) & (Q==0)]).fit()
+model_women_ctrl = smf.ols("dy ~ X", data=df[(S==0) & (Q==1)]).fit()
+model_men_treat = smf.ols("dy ~ X", data=df[(S==1) & (Q==0)]).fit()
+
+# 2. Predict counterfactuals AT THE TARGET GROUP'S COVARIATES
+target = df[(S==1) & (Q==1)]
+cf_men_ctrl = model_men_ctrl.predict(target).mean()
+cf_women_ctrl = model_women_ctrl.predict(target).mean()
+cf_men_treat = model_men_treat.predict(target).mean()
+
+# 3. Compute DR-DDD
+observed = target['dy'].mean()
+dr_ddd = (observed - cf_men_treat) - (cf_women_ctrl - cf_men_ctrl)
+```
+
+## 6. Results
+
+```
+True Effect:           5.00
+Naive 3WFE (OLS):     ~4.2 (BIASED - wrong by ~15%)
+Robust DR-DDD:        ~5.0 (CORRECT)
+```
+
+![Bias Comparison](figs/ddd_comparison.png)
+
+## 7. How to Run
+
+```bash
+cd 06_triple_diff_dr
+python main.py
+```
+
+## 8. Key Takeaways
+
+1. **Naive DDD is biased** when covariate distributions differ between target and placebo
+2. **The fix:** Predict counterfactuals at the target group's covariate distribution
+3. **3 comparisons, not 2:** You need men-control, women-control, AND men-treated
+4. **Doubly robust:** If either the propensity score OR outcome model is correct, you get consistency
+
+## 9. When to Use This
+
+Use robust DDD when:
+- Your placebo group differs systematically from your target group
+- Trends depend on observable covariates
+- You want protection against model misspecification
+
+Use naive DDD when:
+- Target and placebo groups are balanced on observables
+- You're confident trends don't depend on covariates
+- Quick analysis is more important than precision
+
+## References
+
+- Ortiz-Villavicencio, A. & Sant'Anna, P. H. C. (2025). Doubly Robust Difference-in-Difference-in-Differences Estimators.
+- Gruber, J. (1994). The incidence of mandated maternity benefits. *American Economic Review*.
+- Sant'Anna, P. H. C. & Zhao, J. (2020). Doubly robust difference-in-differences estimators. *Journal of Econometrics*.
+
+---
+
+**See also:** [Module 05](../05_hte/) for the basic HTE and naive DDD approach.
