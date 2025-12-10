@@ -13,6 +13,25 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 
+# Set global style for "sexy" visualizations
+sns.set_theme(style="whitegrid", context="notebook", font_scale=1.1)
+plt.rcParams['figure.figsize'] = (10, 6)
+plt.rcParams['figure.dpi'] = 300
+plt.rcParams['axes.titlesize'] = 16
+plt.rcParams['axes.titleweight'] = 'bold'
+plt.rcParams['axes.labelsize'] = 12
+plt.rcParams['lines.linewidth'] = 2.5
+plt.rcParams['lines.markersize'] = 8
+
+# Professional Color Palette
+COLORS = {
+    'treat': '#d62728',    # Red
+    'control': '#1f77b4',  # Blue
+    'counterfactual': '#7f7f7f', # Gray
+    'text': '#333333',
+    'grid': '#e5e5e5'
+}
+
 # Get the root directory of the project
 ROOT_DIR = Path(__file__).parent
 DATA_DIR = ROOT_DIR / "data"
@@ -172,6 +191,35 @@ def load_castle():
     return df
 
 
+def load_injury():
+    """
+    Load the Meyer, Viscusi, & Durbin (1995) worker's compensation dataset.
+
+    Kentucky raised the cap on worker's comp benefits. This is a classic
+    Triple Difference (DDD) example comparing high vs low earners in
+    Kentucky vs Michigan, before and after the policy change.
+
+    Source: Wooldridge package via Rdatasets
+
+    Returns:
+        pd.DataFrame with columns:
+        - durat: Duration of leave (weeks)
+        - afchnge: 1 if after policy change, 0 otherwise (post indicator)
+        - highearn: 1 if high earner (target group), 0 if low earner (placebo)
+        - ky: 1 if Kentucky (treated state), 0 if Michigan (control)
+        - male: 1 if male
+        - married: 1 if married
+        - age: Age in years
+        - hoession: 1 if head injury
+        - ldurat: Log duration of leave
+    """
+    df = pd.read_csv(DATA_DIR / "injury.csv")
+    # Drop the rownames column if present
+    if 'rownames' in df.columns or 'Unnamed: 0' in df.columns:
+        df = df.drop(columns=[c for c in ['rownames', 'Unnamed: 0'] if c in df.columns])
+    return df
+
+
 # =============================================================================
 # Manual DiD Calculation Functions
 # =============================================================================
@@ -313,21 +361,25 @@ def plot_did_trends(df, outcome_col, treat_col, time_col,
     means = df.groupby([time_col, treat_col])[outcome_col].mean().reset_index()
 
     # Plot each group
-    for treat_val, label, color in [(0, 'Control', 'blue'), (1, 'Treated', 'red')]:
+    for treat_val, label, color in [(0, 'Control', COLORS['control']), (1, 'Treated', COLORS['treat'])]:
         group_data = means[means[treat_col] == treat_val]
         ax.plot(group_data[time_col], group_data[outcome_col],
-                marker='o', label=label, color=color, linewidth=2)
+                marker='o', label=label, color=color, linewidth=2.5)
 
     # Add treatment line
     if treatment_time is not None:
-        ax.axvline(x=treatment_time, color='gray', linestyle='--',
-                   label='Treatment', alpha=0.7)
+        ax.axvline(x=treatment_time, color=COLORS['text'], linestyle='--',
+                   label='Treatment', alpha=0.6, linewidth=1.5)
 
     ax.set_xlabel('Time')
     ax.set_ylabel(outcome_col)
     ax.set_title(title or 'Difference-in-Differences: Parallel Trends')
-    ax.legend()
-    ax.grid(True, alpha=0.3)
+    ax.legend(frameon=True, framealpha=0.9)
+    ax.grid(True, alpha=0.3, color=COLORS['grid'])
+    
+    # Clean spines
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
 
     plt.tight_layout()
     return fig, ax
@@ -358,8 +410,8 @@ def plot_event_study(results_df, coef_col='att', se_col=None,
     y = results[coef_col]
 
     # Plot coefficients
-    ax.scatter(x, y, color='blue', s=80, zorder=5)
-    ax.plot(x, y, color='blue', linewidth=1, alpha=0.5)
+    ax.scatter(x, y, color=COLORS['control'], s=100, zorder=5, edgecolor='white', linewidth=1.5)
+    ax.plot(x, y, color=COLORS['control'], linewidth=2, alpha=0.6)
 
     # Add confidence intervals if standard errors provided
     if se_col is not None and se_col in results.columns:
@@ -367,18 +419,22 @@ def plot_event_study(results_df, coef_col='att', se_col=None,
         z = stats.norm.ppf((1 + ci_level) / 2)
         se = results[se_col]
         ax.fill_between(x, y - z * se, y + z * se,
-                       color='blue', alpha=0.2, label=f'{int(ci_level*100)}% CI')
+                       color=COLORS['control'], alpha=0.15, label=f'{int(ci_level*100)}% CI')
 
     # Reference lines
-    ax.axhline(y=0, color='black', linewidth=0.8, linestyle='-')
-    ax.axvline(x=-0.5, color='red', linewidth=1, linestyle='--',
+    ax.axhline(y=0, color=COLORS['text'], linewidth=1, linestyle='-')
+    ax.axvline(x=-0.5, color=COLORS['treat'], linewidth=1.5, linestyle='--',
                label='Treatment')
 
     ax.set_xlabel('Time Relative to Treatment')
     ax.set_ylabel('Treatment Effect')
     ax.set_title(title or 'Event Study')
-    ax.legend()
-    ax.grid(True, alpha=0.3)
+    ax.legend(frameon=True, framealpha=0.9)
+    ax.grid(True, alpha=0.3, color=COLORS['grid'])
+    
+    # Clean spines
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
 
     plt.tight_layout()
     return fig, ax
@@ -405,31 +461,41 @@ def plot_2x2_diagram(results, group_labels=('Control', 'Treated'),
 
     # Control group
     control_y = [results['mu_00'], results['mu_01']]
-    ax.plot(times, control_y, 'b-o', label=group_labels[0], linewidth=2, markersize=10)
+    ax.plot(times, control_y, marker='o', label=group_labels[0], 
+            color=COLORS['control'], linewidth=2.5, markersize=10)
 
     # Treated group (actual)
     treated_y = [results['mu_10'], results['mu_11']]
-    ax.plot(times, treated_y, 'r-o', label=group_labels[1], linewidth=2, markersize=10)
+    ax.plot(times, treated_y, marker='o', label=group_labels[1], 
+            color=COLORS['treat'], linewidth=2.5, markersize=10)
 
     # Counterfactual (parallel trend)
     counterfactual = results['mu_10'] + results['delta_control']
-    ax.plot([0, 1], [results['mu_10'], counterfactual], 'r--',
-            alpha=0.5, linewidth=2, label='Counterfactual')
+    ax.plot([0, 1], [results['mu_10'], counterfactual], linestyle='--',
+            color=COLORS['treat'], alpha=0.5, linewidth=2, label='Counterfactual')
+    
+    # Hollow circle for counterfactual
+    ax.plot(1, counterfactual, marker='o', markersize=10, markerfacecolor='white',
+            markeredgecolor=COLORS['treat'], markeredgewidth=2)
 
     # Annotate the ATT
     ax.annotate('', xy=(1, results['mu_11']), xytext=(1, counterfactual),
                 arrowprops=dict(arrowstyle='<->', color='green', lw=2))
     ax.annotate(f'ATT = {results["att"]:.2f}',
                 xy=(1.05, (results['mu_11'] + counterfactual) / 2),
-                fontsize=12, color='green')
+                fontsize=12, color='green', fontweight='bold')
 
     ax.set_xticks(times)
     ax.set_xticklabels(time_labels)
     ax.set_xlabel('Time Period')
     ax.set_ylabel('Outcome')
     ax.set_title('Difference-in-Differences: 2x2 Design')
-    ax.legend(loc='best')
-    ax.grid(True, alpha=0.3)
+    ax.legend(loc='best', frameon=True, framealpha=0.9)
+    ax.grid(True, alpha=0.3, color=COLORS['grid'])
+    
+    # Clean spines
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
 
     plt.tight_layout()
     return fig, ax

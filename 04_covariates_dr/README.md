@@ -101,10 +101,10 @@ Good overlap means we can find comparable control units.
 
 | Method | ATT Estimate | Note |
 |--------|--------------|------|
-| Naive DiD | -$5,000 | Wrong sign! |
-| IPW | +$1,500 | Reweighted controls |
-| Outcome Regression | +$1,600 | Predicted counterfactual |
-| Doubly Robust | +$1,550 | Protected estimate |
+| Naive DiD | $299 | No covariate adjustment |
+| IPW | $1,246 | Reweighted controls |
+| Outcome Regression | $1,692 | Predicted counterfactual |
+| Doubly Robust | $1,261 | Protected estimate |
 
 ## 7. How to Run
 
@@ -128,6 +128,19 @@ python main.py
 | Selection on observables | Covariates (this module) |
 | Staggered + selection | CS with covariates |
 | Selection on unobservables | Different methods needed |
+
+---
+
+## Appendix: Computation Results
+
+| Method | ATT Estimate | Notes |
+|:-------|:-------------|:------|
+| Naive DiD | $299 | No covariate adjustment |
+| IPW DiD | $1,246 | Inverse probability weighting |
+| Outcome Regression | $1,692 | Predicted counterfactual |
+| Doubly Robust | $1,261 | Combines IPW + OR |
+
+**Verdict:** Naive severely underestimates the effect. DR preferred for protection against model misspecification.
 
 ## References
 

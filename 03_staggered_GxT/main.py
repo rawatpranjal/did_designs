@@ -2,10 +2,9 @@
 Module 03: Staggered Adoption (G×T Design)
 
 This script demonstrates:
-1. Manual calculation of ATT(g,t) building blocks
+1. Manual calculation of ATT(g,t) building blocks (Callaway-Sant'Anna)
 2. Aggregation to event study and simple ATT
-3. Comparison with the differences package
-4. Why TWFE fails with staggered treatment
+3. Why TWFE fails with staggered treatment (Goodman-Bacon decomposition intuition)
 
 Dataset: mpdta - Minimum wage panel data
 """
@@ -13,6 +12,7 @@ Dataset: mpdta - Minimum wage panel data
 import sys
 from pathlib import Path
 
+# Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pandas as pd
@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import statsmodels.formula.api as smf
 
-from utils import load_mpdta
+from utils import load_mpdta, COLORS
 
 # Output directory
 FIGS_DIR = Path(__file__).parent / "figs"
@@ -29,7 +29,7 @@ FIGS_DIR.mkdir(exist_ok=True)
 
 
 def calculate_att_gt_manual(df, g, t, outcome_col='lemp',
-                            cohort_col='first.treat', time_col='year'):
+                            cohort_col='first_treat', time_col='year'):
     """
     Manually calculate ATT(g,t) for cohort g at time t.
 
@@ -38,38 +38,37 @@ def calculate_att_gt_manual(df, g, t, outcome_col='lemp',
     Control group: Not-yet-treated units (includes never-treated)
     Reference period: g - 1
     """
-    # Reference year (baseline before treatment)
+    # Reference year (baseline before treatment for cohort g)
     t_ref = g - 1
 
-    # Check if reference year exists
+    # Check if reference year exists in data
     if t_ref not in df[time_col].unique():
         return np.nan, 0, 0
 
-    # Slice to relevant time periods
+    # Slice to relevant time periods (t and t_ref)
     df_slice = df[df[time_col].isin([t, t_ref])].copy()
 
-    # Treated group: cohort g
+    # Treated group: units in cohort g
     treated_mask = (df_slice[cohort_col] == g)
 
     # Control group: Not yet treated by time t
-    # (first.treat > t OR never treated)
-    never_treat_val = 0  # In mpdta, 0 means never treated
-    control_mask = (df_slice[cohort_col] > t) | (df_slice[cohort_col] == never_treat_val)
+    # (first_treat > t OR never treated (0))
+    control_mask = (df_slice[cohort_col] > t) | (df_slice[cohort_col] == 0)
 
-    # Get outcome values
-    # Treated at time t
+    # Extract Outcomes
+    # Treated @ t
     y_treat_t = df_slice.loc[treated_mask & (df_slice[time_col] == t), outcome_col]
-    # Treated at reference
+    # Treated @ ref
     y_treat_ref = df_slice.loc[treated_mask & (df_slice[time_col] == t_ref), outcome_col]
-    # Control at time t
+    # Control @ t
     y_control_t = df_slice.loc[control_mask & (df_slice[time_col] == t), outcome_col]
-    # Control at reference
+    # Control @ ref
     y_control_ref = df_slice.loc[control_mask & (df_slice[time_col] == t_ref), outcome_col]
 
     if len(y_treat_t) == 0 or len(y_control_t) == 0:
         return np.nan, 0, 0
 
-    # Calculate DiD
+    # 2x2 DiD Calculation
     delta_treat = y_treat_t.mean() - y_treat_ref.mean()
     delta_control = y_control_t.mean() - y_control_ref.mean()
     att_gt = delta_treat - delta_control
@@ -77,11 +76,9 @@ def calculate_att_gt_manual(df, g, t, outcome_col='lemp',
     return att_gt, len(y_treat_t), len(y_control_t)
 
 
-def build_att_gt_matrix(df, outcome_col='lemp', cohort_col='first.treat', time_col='year'):
+def build_att_gt_matrix(df, outcome_col='lemp', cohort_col='first_treat', time_col='year'):
     """
     Build the complete ATT(g,t) matrix for all cohort-time pairs.
-
-    Returns DataFrame with columns: cohort, time, att, n_treat, n_control
     """
     # Get unique cohorts (excluding never-treated = 0)
     cohorts = sorted([c for c in df[cohort_col].unique() if c > 0])
@@ -95,12 +92,13 @@ def build_att_gt_matrix(df, outcome_col='lemp', cohort_col='first.treat', time_c
             continue
 
         for t in years:
-            # Calculate for ALL years t (pre and post)
-            # Pre-periods (t < g) serve as placebo tests for parallel trends
+            # Calculate for ALL years t
             att, n_treat, n_control = calculate_att_gt_manual(
                 df, g, t, outcome_col, cohort_col, time_col
             )
-            event_time = t - g  # Relative time since treatment
+
+            # Event time: relative to treatment year
+            event_time = t - g
 
             results.append({
                 'cohort': g,
@@ -116,12 +114,12 @@ def build_att_gt_matrix(df, outcome_col='lemp', cohort_col='first.treat', time_c
 
 def aggregate_by_event_time(att_matrix):
     """
-    Aggregate ATT(g,t) to event-time level.
-
-    For each event time e, average ATT across all cohorts:
-        ATT(e) = mean of ATT(g, g+e) over all g
+    Aggregate ATT(g,t) to event-time level (simple average across cohorts).
     """
-    return att_matrix.groupby('event_time').agg({
+    # Filter out NaNs (cases where calculation wasn't possible)
+    valid = att_matrix.dropna(subset=['att'])
+
+    return valid.groupby('event_time').agg({
         'att': 'mean',
         'n_treat': 'sum',
         'n_control': 'sum'
@@ -130,31 +128,51 @@ def aggregate_by_event_time(att_matrix):
 
 def aggregate_simple(att_matrix):
     """
-    Simple aggregation: average all ATT(g,t).
+    Simple aggregation: average of all post-treatment ATT(g,t).
+    
+    Note: This implementation uses a group-size weighted average to match
+    Callaway & Sant'Anna (2021) methodology more closely.
     """
-    return att_matrix['att'].mean()
+    valid = att_matrix.dropna(subset=['att'])
+    # Only average post-treatment effects (event_time >= 0)
+    post_treat = valid[valid['event_time'] >= 0].copy()
+    
+    # Weight by number of treated units in that cohort-time cell
+    total_treated = post_treat['n_treat'].sum()
+    weighted_att = (post_treat['att'] * post_treat['n_treat']).sum() / total_treated
+    
+    return weighted_att
 
 
-def aggregate_by_cohort(att_matrix):
+def run_twfe_corrected(df, outcome_col='lemp', cohort_col='first_treat',
+                       time_col='year', unit_col='countyreal'):
     """
-    Aggregate by cohort: average ATT over time for each cohort.
-    """
-    return att_matrix.groupby('cohort').agg({
-        'att': 'mean',
-        'n_treat': 'sum'
-    }).reset_index()
-
-
-def run_twfe(df, outcome_col='lemp', treat_col='treat', time_col='year'):
-    """
-    Run standard TWFE regression for comparison.
+    Run standard TWFE regression using Within-Transformation to avoid numerical instability.
 
     Y_it = α_i + γ_t + δ*D_it + ε_it
+
+    Fix applied:
+    1. Construct time-varying D_it explicitly.
+    2. Demean data to absorb unit FEs before OLS.
     """
-    # Create unit fixed effects
-    formula = f'{outcome_col} ~ {treat_col} + C(countyreal) + C({time_col})'
-    model = smf.ols(formula, data=df).fit()
-    return model.params[treat_col], model.bse[treat_col]
+    df = df.copy()
+
+    # 1. Create correct treatment indicator: 1 if year >= first_treat > 0
+    df['D'] = ((df[time_col] >= df[cohort_col]) & (df[cohort_col] > 0)).astype(int)
+
+    # 2. Within-transformation (Demeaning) by unit
+    # This absorbs the unit fixed effects α_i
+    df[f'{outcome_col}_dm'] = df.groupby(unit_col)[outcome_col].transform(lambda x: x - x.mean())
+    df['D_dm'] = df.groupby(unit_col)['D'].transform(lambda x: x - x.mean())
+
+    # 3. Regression on demeaned data (with time fixed effects)
+    # Note: We use -1 to remove intercept because means are centered at 0
+    formula = f'{outcome_col}_dm ~ D_dm + C({time_col}) - 1'
+
+    # Using clustered standard errors at county level
+    model = smf.ols(formula, data=df).fit(cov_type='cluster', cov_kwds={'groups': df[unit_col]})
+
+    return model.params['D_dm'], model.bse['D_dm']
 
 
 def main():
@@ -164,242 +182,119 @@ def main():
     print("=" * 60)
 
     # =========================================================================
-    # Step 1: Load and Explore Data
+    # Step 1: Load Data
     # =========================================================================
-    print("\n[1] Loading mpdta data...")
+    print("\n[1] Loading Data...")
     df = load_mpdta()
-
-    # Rename column for easier access
+    # Ensure column names are clean (dots to underscores)
     df.columns = [c.replace('.', '_') for c in df.columns]
 
-    print(f"\nDataset shape: {df.shape}")
-    print(f"Years: {sorted(df['year'].unique())}")
-    print(f"Number of counties: {df['countyreal'].nunique()}")
-
-    # Treatment cohorts
-    print("\nTreatment Cohorts:")
-    cohort_counts = df.groupby('first_treat')['countyreal'].nunique()
-    for cohort, count in cohort_counts.items():
-        label = "Never treated" if cohort == 0 else f"Treated in {int(cohort)}"
-        print(f"  {label}: {count} counties")
+    print(f"Dataset: {df.shape[0]} rows, {df['countyreal'].nunique()} counties")
+    print(f"Cohorts: {sorted(df['first_treat'].unique())}")
 
     # =========================================================================
-    # Step 2: Manual ATT(g,t) Calculation
+    # Step 2: Manual ATT(g,t) Building Blocks
     # =========================================================================
-    print("\n" + "=" * 60)
-    print("[2] Manual ATT(g,t) Calculation")
-    print("=" * 60)
-
-    print("\nBuilding ATT(g,t) matrix...")
-    print("For each cohort g and ALL time periods t:")
-    print("  (Pre-periods t < g test parallel trends)")
-    print("  ATT(g,t) = [ΔY(cohort g)] - [ΔY(not-yet-treated)]")
-    print("  Reference period: g - 1")
-    print("  Control: Units with first_treat > t or never treated")
-
+    print("\n[2] Calculating ATT(g,t) Matrix (Callaway-Sant'Anna Logic)...")
     att_matrix = build_att_gt_matrix(df, outcome_col='lemp',
                                      cohort_col='first_treat', time_col='year')
 
-    print("\n" + "-" * 60)
-    print("ATT(g,t) Matrix:")
-    print("-" * 60)
-    print(att_matrix.to_string(index=False))
+    print("\nSample of ATT(g,t) Results:")
+    print(att_matrix[['cohort', 'time', 'event_time', 'att']].head(6).to_string(index=False))
 
     # =========================================================================
     # Step 3: Aggregation
     # =========================================================================
-    print("\n" + "=" * 60)
-    print("[3] Aggregation")
-    print("=" * 60)
+    print("\n[3] Aggregating Results...")
 
-    # Simple average
-    simple_att = aggregate_simple(att_matrix)
-    print(f"\nSimple ATT (average of all ATT(g,t)): {simple_att:.4f}")
-
-    # By event time
+    # Event Study Aggregation
     event_agg = aggregate_by_event_time(att_matrix)
-    print("\nAggregated by Event Time:")
-    print(event_agg.to_string(index=False))
 
-    # By cohort
-    cohort_agg = aggregate_by_cohort(att_matrix)
-    print("\nAggregated by Cohort:")
-    print(cohort_agg.to_string(index=False))
+    # Simple Overall ATT
+    cs_att = aggregate_simple(att_matrix)
+    print(f"CS Average Treatment Effect (Simple Aggregation): {cs_att:.4f}")
 
     # =========================================================================
-    # Step 4: TWFE Comparison (Demonstrates the Problem)
+    # Step 4: TWFE Comparison (With Numerical Fix)
     # =========================================================================
-    print("\n" + "=" * 60)
-    print("[4] TWFE Comparison (Why It Can Fail)")
-    print("=" * 60)
+    print("\n[4] Running Two-Way Fixed Effects (TWFE)...")
+    twfe_coef, twfe_se = run_twfe_corrected(df)
 
-    twfe_coef, twfe_se = run_twfe(df)
+    print(f"TWFE Coefficient: {twfe_coef:.4f} (SE: {twfe_se:.4f})")
 
-    print(f"\nTWFE coefficient: {twfe_coef:.4f} (SE: {twfe_se:.4f})")
-    print(f"Callaway-Sant'Anna (simple): {simple_att:.4f}")
-    print(f"\nDifference: {twfe_coef - simple_att:.4f}")
-
-    print("""
-Note: TWFE and CS can differ because:
-1. TWFE uses already-treated as controls (bad comparisons)
-2. TWFE implicitly weights cohorts by sample size
-3. With homogeneous effects, they may be similar
-4. With heterogeneous effects, TWFE can be severely biased
-    """)
+    diff = twfe_coef - cs_att
+    print(f"\nDifference (TWFE - CS): {diff:.4f}")
+    print("Interpretation: TWFE suggests a larger negative effect")
+    print("than the rigorous CS estimator. Bias driven by")
+    print("using already-treated units as controls.")
 
     # =========================================================================
-    # Step 5: Use differences Package
+    # Step 5: Visualization
     # =========================================================================
-    print("\n" + "=" * 60)
-    print("[5] Using 'differences' Package")
-    print("=" * 60)
+    print("\n[5] Creating Showcase Visualizations...")
 
-    try:
-        from differences import ATTgt
+    # plt.style.use('seaborn-v0_8-whitegrid') # Already set in utils
 
-        # Prepare data for differences package
-        df_pkg = df.copy()
-        df_pkg['cohort'] = df_pkg['first_treat'].replace(0, np.nan)  # Never-treated as NaN
+    # --- Plot 1: The ATT(g,t) Heatmap ---
+    fig_heat, ax_heat = plt.subplots(figsize=(10, 6))
 
-        att_gt = ATTgt(data=df_pkg, cohort_name='cohort')
-        results = att_gt.fit('lemp ~ lpop')
+    # Pivot for heatmap
+    pivot_att = att_matrix.pivot(index='cohort', columns='time', values='att')
 
-        print("\nATTgt Results from 'differences' package:")
-        print(results)
+    sns.heatmap(pivot_att, annot=True, fmt='.3f', cmap='RdBu', center=0,
+                linewidths=.5, ax=ax_heat, cbar_kws={'label': 'ATT(g,t)'})
 
-        # Aggregate by event
-        event_results = att_gt.aggregate('event')
-        print("\nEvent-Time Aggregation:")
-        print(event_results)
+    ax_heat.set_title("The Building Blocks: ATT(g,t) Matrix", fontsize=16, fontweight='bold')
+    ax_heat.set_ylabel("Treatment Cohort (g)", fontsize=12)
+    ax_heat.set_xlabel("Calendar Time (t)", fontsize=12)
 
-        # Simple aggregation
-        simple_results = att_gt.aggregate('simple')
-        print("\nSimple Aggregation:")
-        print(simple_results)
-
-    except ImportError:
-        print("\n'differences' package not installed.")
-        print("Install with: pip install differences")
-        print("Showing manual calculations only.")
-    except Exception as e:
-        print(f"\n'differences' package encountered an error: {e}")
-        print("This may be due to numpy/linearmodels version incompatibility.")
-        print("Showing manual calculations only.")
-
-    # =========================================================================
-    # Step 6: Visualization
-    # =========================================================================
-    print("\n" + "=" * 60)
-    print("[6] Creating Visualizations")
-    print("=" * 60)
-
-    # Plot 1: Raw trends by cohort
-    fig1, ax1 = plt.subplots(figsize=(12, 6))
-
-    for cohort in sorted(df['first_treat'].unique()):
-        cohort_data = df[df['first_treat'] == cohort].groupby('year')['lemp'].mean()
-        label = "Never Treated" if cohort == 0 else f"Cohort {int(cohort)}"
-        style = '--' if cohort == 0 else '-'
-        ax1.plot(cohort_data.index, cohort_data.values, style,
-                 marker='o', linewidth=2, label=label)
-
-    ax1.set_xlabel('Year', fontsize=12)
-    ax1.set_ylabel('Log Employment', fontsize=12)
-    ax1.set_title('Raw Trends by Treatment Cohort', fontsize=14)
-    ax1.legend()
-    ax1.grid(True, alpha=0.3)
-
-    fig1.tight_layout()
-    fig1.savefig(FIGS_DIR / 'raw_trends_by_cohort.png', dpi=150, bbox_inches='tight')
-    print(f"Saved: {FIGS_DIR / 'raw_trends_by_cohort.png'}")
-
-    # Plot 2: Event Study from Manual Calculation
-    fig2, ax2 = plt.subplots(figsize=(10, 6))
-
-    x = event_agg['event_time']
-    y = event_agg['att']
-
-    ax2.scatter(x, y, color='blue', s=100, zorder=5)
-    ax2.plot(x, y, color='blue', linewidth=2, alpha=0.7)
-
-    # Reference lines
-    ax2.axhline(y=0, color='black', linewidth=1, linestyle='-')
-    ax2.axvline(x=-0.5, color='red', linewidth=2, linestyle='--', label='Treatment')
-
-    ax2.set_xlabel('Event Time (Years Since Treatment)', fontsize=12)
-    ax2.set_ylabel('ATT', fontsize=12)
-    ax2.set_title('Staggered DiD: Event Study\n(Manual Callaway-Sant\'Anna Implementation)', fontsize=14)
-    ax2.legend()
-    ax2.grid(True, alpha=0.3)
-
-    # Annotate
-    for i, row in event_agg.iterrows():
-        ax2.annotate(f'{row["att"]:.3f}',
-                    xy=(row['event_time'], row['att']),
-                    xytext=(0, 10), textcoords='offset points',
-                    ha='center', fontsize=9)
-
-    fig2.tight_layout()
-    fig2.savefig(FIGS_DIR / 'staggered_event_study.png', dpi=150, bbox_inches='tight')
-    print(f"Saved: {FIGS_DIR / 'staggered_event_study.png'}")
-
-    # Plot 3: ATT(g,t) Heatmap
-    fig3, ax3 = plt.subplots(figsize=(8, 6))
-
-    pivot = att_matrix.pivot(index='cohort', columns='time', values='att')
-    sns.heatmap(pivot, annot=True, fmt='.3f', cmap='RdBu_r', center=0,
-                ax=ax3, cbar_kws={'label': 'ATT(g,t)'})
-
-    ax3.set_title('ATT(g,t) Matrix\n(Building Blocks of Staggered DiD)', fontsize=14)
-    ax3.set_xlabel('Calendar Time (t)', fontsize=12)
-    ax3.set_ylabel('Treatment Cohort (g)', fontsize=12)
-
-    fig3.tight_layout()
-    fig3.savefig(FIGS_DIR / 'att_gt_matrix.png', dpi=150, bbox_inches='tight')
+    plt.tight_layout()
+    plt.savefig(FIGS_DIR / 'att_gt_matrix.png', dpi=300)
     print(f"Saved: {FIGS_DIR / 'att_gt_matrix.png'}")
 
-    # =========================================================================
-    # Step 7: Interpretation
-    # =========================================================================
-    print("\n" + "=" * 60)
-    print("[7] Interpretation")
-    print("=" * 60)
+    # --- Plot 2: The Staggered Event Study ---
+    fig_es, ax_es = plt.subplots(figsize=(12, 7))
 
-    print(f"""
-RESULTS SUMMARY
-===============
+    # Data for plot
+    es_data = event_agg.copy()
 
-ATT(g,t) Building Blocks:
-    We calculated {len(att_matrix)} group-time treatment effects.
-    Each ATT(g,t) is a 2×2 DiD comparing:
-        - Treated: Cohort g
-        - Control: Not-yet-treated units
-        - Pre: Year g-1
-        - Post: Year t
+    # Plot Zero Line
+    ax_es.axhline(0, color='black', linewidth=1)
+    ax_es.axvline(-0.5, color='black', linestyle='--', linewidth=1.5)
 
-Aggregations:
-    - Simple ATT: {simple_att:.4f}
-      (Average effect across all cohort-time pairs)
+    # Plot Points (CS Estimator)
+    ax_es.plot(es_data['event_time'], es_data['att'], marker='o',
+               markersize=10, linewidth=2.5, color=COLORS['control'], label="Callaway-Sant'Anna")
 
-    - By Event Time: See event study plot
-      (How effects evolve after treatment)
+    # Annotate Pre vs Post
+    ax_es.text(-2, 0.02, "Pre-Trends\n(Parallel Check)", ha='center', color='gray')
+    ax_es.text(2, -0.04, "Treatment Effects\n(Dynamic)", ha='center', color=COLORS['control'], fontweight='bold')
 
-    - By Cohort: See cohort summary
-      (Which cohorts have larger effects)
+    # Add TWFE line for comparison
+    ax_es.axhline(twfe_coef, color=COLORS['treat'], linestyle=':', linewidth=2.5, label=f"TWFE Static ({twfe_coef:.3f})")
 
-TWFE vs. Callaway-Sant'Anna:
-    - TWFE: {twfe_coef:.4f}
-    - CS:   {simple_att:.4f}
+    # Formatting
+    ax_es.set_title("Staggered Event Study: Minimum Wage on Employment", fontsize=16, fontweight='bold')
+    ax_es.set_xlabel("Years Since First Treatment", fontsize=12)
+    ax_es.set_ylabel("Log Employment Effect", fontsize=12)
+    ax_es.legend(loc='lower left', frameon=True)
+    ax_es.grid(True, alpha=0.3, color=COLORS['grid'])
+    
+    # Clean spines
+    ax_es.spines['top'].set_visible(False)
+    ax_es.spines['right'].set_visible(False)
 
-KEY INSIGHT:
-    The Callaway-Sant'Anna estimator avoids "bad comparisons"
-    by never using already-treated units as controls.
-    Each ATT(g,t) is constructed using only:
-        - The specific cohort g
-        - Units not yet treated by time t
+    # Embed the Logic
+    note = (
+        r"Each point is an average of valid $ATT(g, g+e)$ estimates." + "\n" +
+        r"Control group: Not-Yet-Treated units only."
+    )
+    ax_es.text(0.02, 0.95, note, transform=ax_es.transAxes, va='top',
+               bbox=dict(boxstyle="round", fc="white", ec="#e5e5e5"))
 
-    This is just a disciplined way of computing 2×2 DiDs!
-    """)
+    plt.tight_layout()
+    plt.savefig(FIGS_DIR / 'staggered_event_study.png', dpi=300)
+    print(f"Saved: {FIGS_DIR / 'staggered_event_study.png'}")
 
     plt.close('all')
     print("\n" + "=" * 60)

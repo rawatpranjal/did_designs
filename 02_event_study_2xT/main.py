@@ -20,7 +20,7 @@ import statsmodels.formula.api as smf
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from utils import load_smoking, calculate_2x2_did, plot_event_study
+from utils import load_smoking, calculate_2x2_did, plot_event_study, COLORS
 
 # Output directory
 FIGS_DIR = Path(__file__).parent / "figs"
@@ -105,6 +105,7 @@ def regression_event_study(df, outcome_col='cigsale', treat_col='treated',
                            time_col='year', ref_year=REFERENCE_YEAR):
     """
     Calculate event study using regression with year dummies.
+    Uses Clustered Standard Errors (by state) for rigorous inference.
 
     Model: Y_it = α + Σ_t β_t * (D_i × 1[t]) + γ_t + ε_it
 
@@ -125,8 +126,8 @@ def regression_event_study(df, outcome_col='cigsale', treat_col='treated',
     interactions = ' + '.join([f'treat_x_{y}' for y in years_excl_ref])
     formula = f'{outcome_col} ~ {interactions} + C({time_col}) + {treat_col}'
 
-    # Fit model
-    model = smf.ols(formula, data=df).fit()
+    # Fit model with CLUSTERED Standard Errors (State level)
+    model = smf.ols(formula, data=df).fit(cov_type='cluster', cov_kwds={'groups': df['state']})
 
     # Extract event study coefficients
     results = []
@@ -136,7 +137,9 @@ def regression_event_study(df, outcome_col='cigsale', treat_col='treated',
                 'year': year,
                 'event_time': year - TREATMENT_YEAR,
                 'att': 0.0,
-                'se': 0.0
+                'se': 0.0,
+                'ci_lower': 0.0,
+                'ci_upper': 0.0
             })
         else:
             coef_name = f'treat_x_{year}'
@@ -144,7 +147,9 @@ def regression_event_study(df, outcome_col='cigsale', treat_col='treated',
                 'year': year,
                 'event_time': year - TREATMENT_YEAR,
                 'att': model.params[coef_name],
-                'se': model.bse[coef_name]
+                'se': model.bse[coef_name],
+                'ci_lower': model.conf_int().loc[coef_name][0],
+                'ci_upper': model.conf_int().loc[coef_name][1]
             })
 
     return pd.DataFrame(results), model
@@ -265,48 +270,81 @@ def main():
     print(f"Std of pre-period ATTs: {np.std(pre_att):.4f}")
 
     # =========================================================================
-    # Step 7: Create Event Study Plot
+    # Step 7: The "Showcase" Event Study Visualization
     # =========================================================================
     print("\n" + "=" * 60)
-    print("[7] Creating Event Study Plot")
+    print("[7] Creating The Ultimate Event Study Visual")
     print("=" * 60)
 
-    fig2, ax2 = plt.subplots(figsize=(12, 6))
+    # Use regression results (with clustered SEs)
+    res = reg_results.copy()
 
-    # Plot coefficients
-    x = manual_results['event_time']
-    y = manual_results['att']
-    se = manual_results['se']
+    # plt.style.use('seaborn-v0_8-whitegrid') # Already set in utils
+    fig2, ax2 = plt.subplots(figsize=(12, 7))
 
-    # Point estimates
-    ax2.scatter(x, y, color='blue', s=80, zorder=5)
-    ax2.plot(x, y, color='blue', linewidth=1, alpha=0.5)
+    # Split into Pre and Post for styling
+    pre = res[res['event_time'] < 0]
+    post = res[res['event_time'] >= 0]
+    ref = res[res['event_time'] == -1]  # Reference point
 
-    # Confidence intervals (95%)
-    ax2.fill_between(x, y - 1.96*se, y + 1.96*se,
-                     color='blue', alpha=0.2, label='95% CI')
+    # --- 1. Plot Confidence Intervals & Points ---
 
-    # Reference lines
-    ax2.axhline(y=0, color='black', linewidth=1, linestyle='-')
-    ax2.axvline(x=-0.5, color='red', linewidth=2, linestyle='--',
-                label='Treatment (1988)')
+    # Pre-Period (Testing Zone): Gray color scheme
+    ax2.errorbar(pre['event_time'], pre['att'],
+                 yerr=1.96*pre['se'], fmt='o', color=COLORS['counterfactual'],
+                 ecolor=COLORS['counterfactual'], elinewidth=2, capsize=0,
+                 label='Pre-Trend Test', alpha=0.8, markersize=8)
 
-    # Labels
-    ax2.set_xlabel('Years Relative to Prop 99', fontsize=12)
-    ax2.set_ylabel('Treatment Effect (Packs per Capita)', fontsize=12)
-    ax2.set_title('Event Study: California Proposition 99\nEffect on Cigarette Sales', fontsize=14)
-    ax2.legend(loc='lower left')
-    ax2.grid(True, alpha=0.3)
+    # Post-Period (Effect Zone): Red color scheme
+    ax2.errorbar(post['event_time'], post['att'],
+                 yerr=1.96*post['se'], fmt='o', color=COLORS['treat'],
+                 ecolor=COLORS['treat'], elinewidth=2, capsize=0,
+                 label='Treatment Effect', alpha=0.9, markersize=8)
 
-    # Annotate pre and post
-    ax2.annotate('Pre-treatment\n(test parallel trends)',
-                xy=(-10, 5), fontsize=10, ha='center', color='gray')
-    ax2.annotate('Post-treatment\n(treatment effects)',
-                xy=(8, -30), fontsize=10, ha='center', color='gray')
+    # Reference Year (Explicitly marked with black diamond)
+    ax2.plot(ref['event_time'], ref['att'], marker='D', color='black',
+             markersize=10, zorder=10, label='Reference (t=-1)')
+
+    # --- 2. Structural Lines ---
+    ax2.axhline(0, color='black', linewidth=1, linestyle='-')
+    ax2.axvline(-0.5, color='black', linewidth=1.5, linestyle='--')
+
+    # --- 3. Embed the Math ---
+    equation = (
+        r"$ATT_t = (\bar{y}_{T,t} - \bar{y}_{T,ref}) - (\bar{y}_{C,t} - \bar{y}_{C,ref})$"
+    )
+    ax2.text(0.02, 0.95, equation, transform=ax2.transAxes, ha='left', va='top',
+             fontsize=12, bbox=dict(boxstyle="round,pad=0.5", fc="white", ec="#e5e5e5", alpha=0.9))
+
+    # --- 4. Annotations ---
+    # Treatment label
+    ax2.text(-0.7, ax2.get_ylim()[0]*0.85, "Treatment\nStarts (1988)",
+             ha='right', va='bottom', fontsize=10, fontstyle='italic', color='black')
+
+    # Pre-trend logic
+    ax2.text(-10, 12, "Testing Zone:\nPre-trends ≈ 0",
+             ha='center', fontsize=10, color=COLORS['counterfactual'], fontweight='bold')
+
+    # Post-trend logic (positioned lower to avoid overlapping with data points)
+    ax2.text(6, -35, "Result Zone:\nDynamic Treatment Effect",
+             ha='center', fontsize=10, color=COLORS['treat'], fontweight='bold')
+
+    # --- 5. Formatting ---
+    ax2.set_xlabel("Years Relative to Proposition 99", fontsize=12)
+    ax2.set_ylabel("Difference in Cigarette Sales (Packs/Capita)", fontsize=12)
+    ax2.set_title("Event Study: The Effect of Prop 99 on Cigarette Sales",
+                  fontsize=16, fontweight='bold', pad=15)
+
+    ax2.legend(loc='lower left', frameon=True, framealpha=0.9)
+    ax2.set_xlim(res['event_time'].min() - 1, res['event_time'].max() + 1)
+
+    # Clean spines
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
 
     fig2.tight_layout()
-    fig2.savefig(FIGS_DIR / 'event_study.png', dpi=150, bbox_inches='tight')
-    print(f"Saved: {FIGS_DIR / 'event_study.png'}")
+    fig2.savefig(FIGS_DIR / 'event_study_showcase.png', dpi=300, bbox_inches='tight')
+    print(f"Saved: {FIGS_DIR / 'event_study_showcase.png'}")
 
     # =========================================================================
     # Step 8: Interpretation

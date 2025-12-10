@@ -94,7 +94,7 @@ The coefficient $\delta$ is **numerically identical** to our manual calculation.
 
 ### Interpretation
 
-The minimum wage increase in NJ was associated with a **2.76 FTE increase** in employment relative to what would have happened without the policy (the Pennsylvania trend).
+The minimum wage increase in NJ was associated with a **2.75 FTE increase** in employment relative to what would have happened without the policy (the Pennsylvania trend).
 
 This contradicts the standard economic prediction that minimum wage increases reduce employment.
 
@@ -112,6 +112,17 @@ python main.py
 1. **DiD is simple:** It's just four numbers and some subtraction
 2. **Regression is a calculator:** The OLS coefficient equals the manual calculation
 3. **The intuition:** We use the control group's change to construct the counterfactual for the treated group
+
+---
+
+## Appendix: Computation Results
+
+| Method | Estimate | Notes |
+|:-------|:---------|:------|
+| Manual DiD ("Four Numbers") | +2.7536 | (21.03 - 20.44) - (21.17 - 23.33) |
+| OLS Regression (δ) | +2.7536 | `fte ~ treated * post` |
+
+**Verdict:** Exact match (diff = 0.0000). OLS is just a convenient calculator for the manual formula.
 
 ## References
 

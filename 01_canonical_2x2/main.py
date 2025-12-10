@@ -21,7 +21,7 @@ import statsmodels.api as sm
 import statsmodels.formula.api as smf
 import matplotlib.pyplot as plt
 
-from utils import load_card_krueger
+from utils import load_card_krueger, COLORS
 
 # Output directory
 FIGS_DIR = Path(__file__).parent / "figs"
@@ -156,88 +156,81 @@ Key Assumption:
     """)
 
     # =========================================================================
-    # Step 6: Create Visualizations
+    # Step 6: The "Showcase" Visualization
     # =========================================================================
     print("\n" + "=" * 60)
-    print("[6] Creating Visualizations")
+    print("[6] Creating The Ultimate DiD Visual")
     print("=" * 60)
 
-    # Plot 1: The Classic 2x2 Diagram
-    fig1, ax1 = plt.subplots(figsize=(10, 6))
+    # Setup the plot style
+    # plt.style.use('seaborn-v0_8-whitegrid') # Already set in utils
+    fig, ax = plt.subplots(figsize=(10, 7))
 
-    times = [0, 1]
-    time_labels_plot = ['Feb 1992\n(Pre)', 'Nov 1992\n(Post)']
+    # --- 1. Plot the Actual Data ---
 
-    # Control group (PA)
-    ax1.plot(times, [mu_control_pre, mu_control_post], 'b-o',
-             linewidth=2, markersize=10, label='PA (Control)')
+    # Control Group (PA) - The Baseline
+    ax.plot([0, 1], [mu_control_pre, mu_control_post], color=COLORS['control'],
+            marker='o', markersize=10, linewidth=2.5, linestyle='-',
+            label='Control (PA)')
 
-    # Treated group (NJ)
-    ax1.plot(times, [mu_treat_pre, mu_treat_post], 'r-o',
-             linewidth=2, markersize=10, label='NJ (Treated)')
+    # Treatment Group (NJ) - The Actual Outcome
+    ax.plot([0, 1], [mu_treat_pre, mu_treat_post], color=COLORS['treat'],
+            marker='o', markersize=10, linewidth=3, linestyle='-',
+            label='Treated (NJ)')
 
-    # Counterfactual: what would have happened to NJ under PA's trend
-    counterfactual = mu_treat_pre + diff_control
-    ax1.plot([0, 1], [mu_treat_pre, counterfactual], 'r--',
-             linewidth=2, alpha=0.5, label='Counterfactual (NJ)')
+    # --- 2. Plot the Counterfactual (The "Ghost" Line) ---
+    # What NJ would have looked like if it followed PA's trend
+    cf_outcome = mu_treat_pre + diff_control
 
-    # Annotate the ATT with arrow
-    mid_y = (mu_treat_post + counterfactual) / 2
-    ax1.annotate('', xy=(1.02, mu_treat_post), xytext=(1.02, counterfactual),
+    ax.plot([0, 1], [mu_treat_pre, cf_outcome], color=COLORS['treat'],
+            linestyle='--', linewidth=2, alpha=0.6,
+            label='Counterfactual (Parallel Trends)')
+
+    # Add a hollow circle at the counterfactual point
+    ax.plot(1, cf_outcome, marker='o', markersize=10, markerfacecolor='white',
+            markeredgecolor=COLORS['treat'], markeredgewidth=2)
+
+    # --- 3. Annotate the "Effect" (The DiD) ---
+    # Draw a vertical double-arrow
+    ax.annotate('', xy=(1, mu_treat_post), xytext=(1, cf_outcome),
                 arrowprops=dict(arrowstyle='<->', color='green', lw=2))
-    ax1.annotate(f'ATT = {att_manual:+.2f}', xy=(1.08, mid_y),
-                fontsize=12, color='green', fontweight='bold')
 
-    ax1.set_xticks(times)
-    ax1.set_xticklabels(time_labels_plot)
-    ax1.set_xlabel('Time Period', fontsize=12)
-    ax1.set_ylabel('Full-Time Equivalent Employment', fontsize=12)
-    ax1.set_title('The Canonical 2x2 DiD\nCard & Krueger (1994)', fontsize=14)
-    ax1.legend(loc='upper right')
-    ax1.grid(True, alpha=0.3)
-    ax1.set_xlim(-0.2, 1.4)
+    # Text label for the effect
+    mid_point = (mu_treat_post + cf_outcome) / 2
+    ax.text(1.02, mid_point, f"ATT = {att_manual:+.2f}\n(Causal Effect)",
+            color='green', va='center', fontweight='bold', fontsize=12)
 
-    fig1.tight_layout()
-    fig1.savefig(FIGS_DIR / 'did_2x2.png', dpi=150, bbox_inches='tight')
-    print(f"Saved: {FIGS_DIR / 'did_2x2.png'}")
+    # --- 4. Annotate the Equation "In-Situ" ---
+    equation = (
+        r"$\hat{\delta}_{DiD} = (\bar{y}_{T,Post} - \bar{y}_{T,Pre}) - "
+        r"(\bar{y}_{C,Post} - \bar{y}_{C,Pre})$"
+    )
+    ax.text(0.5, 0.05, equation, transform=ax.transAxes, ha='center',
+            fontsize=14, bbox=dict(boxstyle="round,pad=0.5", fc="white", ec="black", alpha=0.8))
 
-    # Plot 2: Detailed comparison with means and CIs
-    fig2, ax2 = plt.subplots(figsize=(10, 6))
+    # --- 5. Formatting ---
+    ax.set_xticks([0, 1])
+    ax.set_xticklabels(['Pre-Period\n(Feb 1992)', 'Post-Period\n(Nov 1992)'], fontsize=11)
+    ax.set_ylabel('FTE Employment', fontsize=12)
+    ax.set_title('The Canonical 2x2 Difference-in-Differences Design',
+                 fontsize=16, fontweight='bold', pad=20)
 
-    # Calculate means and standard errors
-    summary = df.groupby(['treated', 'post'])['fte'].agg(['mean', 'std', 'count'])
-    summary['se'] = summary['std'] / np.sqrt(summary['count'])
+    # Move legend to bottom
+    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.12), ncol=3, frameon=False)
 
-    for treat_val, color, label in [(0, 'blue', 'PA (Control)'), (1, 'red', 'NJ (Treated)')]:
-        means = [summary.loc[(treat_val, t), 'mean'] for t in times]
-        ses = [summary.loc[(treat_val, t), 'se'] for t in times]
+    # Clean spines
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
 
-        ax2.errorbar(times, means, yerr=[1.96*s for s in ses],
-                    marker='o', capsize=5, linewidth=2,
-                    color=color, label=label, markersize=10)
+    # Add subtle trend annotation
+    ax.annotate("Parallel Trends Assumption:\nNJ would have followed PA's slope",
+                xy=(0.5, (mu_treat_pre + cf_outcome)/2), xytext=(0.2, mu_treat_pre - 1.5),
+                arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=.2", color="gray"),
+                color="gray", fontsize=10)
 
-    # Add counterfactual
-    ax2.plot([0, 1], [mu_treat_pre, counterfactual], 'r--',
-             alpha=0.5, linewidth=2, label='Counterfactual')
-
-    # Annotate ATT
-    ax2.annotate('', xy=(1.02, mu_treat_post), xytext=(1.02, counterfactual),
-                arrowprops=dict(arrowstyle='<->', color='green', lw=2))
-    ax2.annotate(f'ATT = {att_manual:.2f}', xy=(1.08, mid_y),
-                fontsize=12, color='green', fontweight='bold')
-
-    ax2.set_xticks(times)
-    ax2.set_xticklabels(time_labels_plot)
-    ax2.set_xlabel('Time Period', fontsize=12)
-    ax2.set_ylabel('Full-Time Equivalent Employment', fontsize=12)
-    ax2.set_title('Card & Krueger (1994): Minimum Wage and Employment\nDifference-in-Differences Estimate', fontsize=14)
-    ax2.legend(loc='upper right')
-    ax2.grid(True, alpha=0.3)
-    ax2.set_xlim(-0.2, 1.4)
-
-    fig2.tight_layout()
-    fig2.savefig(FIGS_DIR / 'card_krueger_detailed.png', dpi=150, bbox_inches='tight')
-    print(f"Saved: {FIGS_DIR / 'card_krueger_detailed.png'}")
+    plt.tight_layout()
+    fig.savefig(FIGS_DIR / 'did_showcase.png', dpi=300, bbox_inches='tight')
+    print(f"Saved: {FIGS_DIR / 'did_showcase.png'}")
 
     # =========================================================================
     # Step 7: Full Regression Output

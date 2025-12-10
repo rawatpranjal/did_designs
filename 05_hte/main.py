@@ -2,19 +2,18 @@
 Module 05: Heterogeneous Treatment Effects (HTE)
 
 This script demonstrates:
-1. Heterogeneous Treatment Effects (split-sample DiD)
-2. Testing for effect heterogeneity across subgroups
+1. Simple Pooled DiD (The "Average" Effect)
+2. Heterogeneous Treatment Effects via Split-Sample DiD
 3. Using the differences package for HTE analysis
-4. Basic Triple Difference (DDD) concept
+4. Visualizing heterogeneity with Forest Plots
 
 Dataset: mpdta (Minimum Wage Panel) - Real data from `did` R package
-
-For advanced Doubly Robust DDD with covariate adjustment, see Module 06.
 """
 
 import sys
 from pathlib import Path
 
+# Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pandas as pd
@@ -22,16 +21,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from utils import load_mpdta, calculate_2x2_did
+from utils import load_mpdta, calculate_2x2_did, COLORS
 
 # Output directory
 FIGS_DIR = Path(__file__).parent / "figs"
 FIGS_DIR.mkdir(exist_ok=True)
 
 
-def did_2x2(df, outcome_col='y', treat_col='treated', post_col='post'):
+def did_2x2(df, outcome_col='lemp', treat_col='treated', post_col='post'):
     """
-    Simple 2x2 DiD calculation.
+    Simple 2x2 DiD calculation wrapper.
     """
     results = calculate_2x2_did(df, outcome_col, treat_col, post_col, verbose=False)
     return results['att']
@@ -40,26 +39,31 @@ def did_2x2(df, outcome_col='y', treat_col='treated', post_col='post'):
 def calculate_hte(df, subgroup_col, outcome_col='lemp', treat_col='treated', post_col='post'):
     """
     Calculate Heterogeneous Treatment Effects by subgroup.
-
-    Returns ATT for each unique value of subgroup_col.
+    Returns a DataFrame with ATT, SE, and N for each subgroup.
     """
     results = []
 
+    # Iterate through unique values of the subgroup column
     for subgroup_val in sorted(df[subgroup_col].unique()):
+        # Split the sample
         df_sub = df[df[subgroup_col] == subgroup_val].copy()
+
+        # Calculate ATT for this subgroup
         att = did_2x2(df_sub, outcome_col, treat_col, post_col)
 
-        # Bootstrap SE
+        # Simple Bootstrap Standard Error
         n_boot = 200
         boot_atts = []
         for _ in range(n_boot):
+            # Resample with replacement within the subgroup
             df_boot = df_sub.sample(n=len(df_sub), replace=True)
             try:
-                boot_att = did_2x2(df_boot, outcome_col, treat_col, post_col)
-                boot_atts.append(boot_att)
+                b_att = did_2x2(df_boot, outcome_col, treat_col, post_col)
+                boot_atts.append(b_att)
             except:
                 continue
-        se = np.std(boot_atts) if boot_atts else np.nan
+
+        se = np.std(boot_atts) if boot_atts else 0.0
 
         results.append({
             'subgroup': subgroup_val,
@@ -71,77 +75,27 @@ def calculate_hte(df, subgroup_col, outcome_col='lemp', treat_col='treated', pos
     return pd.DataFrame(results)
 
 
-def calculate_ddd(df, eligible_col='eligible', outcome_col='y',
-                  treat_col='treated', post_col='post'):
-    """
-    Calculate Triple Difference (DDD).
-
-    DDD = DiD(eligible) - DiD(placebo)
-    """
-    # DiD for eligible (targeted group)
-    df_eligible = df[df[eligible_col] == 1]
-    did_eligible = did_2x2(df_eligible, outcome_col, treat_col, post_col)
-
-    # DiD for placebo (not targeted)
-    df_placebo = df[df[eligible_col] == 0]
-    did_placebo = did_2x2(df_placebo, outcome_col, treat_col, post_col)
-
-    # DDD
-    ddd = did_eligible - did_placebo
-
-    # Bootstrap SE for DDD
-    n_boot = 500
-    boot_ddd = []
-    for _ in range(n_boot):
-        df_boot = df.sample(n=len(df), replace=True)
-        did_e = did_2x2(df_boot[df_boot[eligible_col] == 1], outcome_col, treat_col, post_col)
-        did_p = did_2x2(df_boot[df_boot[eligible_col] == 0], outcome_col, treat_col, post_col)
-        boot_ddd.append(did_e - did_p)
-    se_ddd = np.std(boot_ddd)
-
-    return {
-        'did_eligible': did_eligible,
-        'did_placebo': did_placebo,
-        'ddd': ddd,
-        'se': se_ddd
-    }
-
-
 def load_hte_data():
     """
-    Load mpdta data and create subgroups for HTE analysis.
+    Load mpdta data and prepare for HTE analysis.
 
-    Creates a population size subgroup (high/low population counties).
-
-    For simple 2x2 HTE analysis, we use a simplified setup:
-    - Pre: 2003-2004 (before most treatments)
-    - Post: 2006-2007 (after treatment starts for most cohorts)
-    - Treated: Counties that were ever treated (first_treat > 0)
-    - Control: Counties that were never treated (first_treat == 0)
+    We create a 'high_pop' indicator to serve as our subgroup.
+    We want to see if the Minimum Wage effect differs by county size.
     """
     df = load_mpdta()
-
-    # Clean column names (replace dots with underscores)
     df.columns = [c.replace('.', '_') for c in df.columns]
 
-    # Create population subgroup based on median lpop
+    # Create subgroup based on median population (High vs Low)
     median_lpop = df['lpop'].median()
     df['high_pop'] = (df['lpop'] >= median_lpop).astype(int)
 
-    # Create treatment indicator: ever treated vs never treated
+    # Treatment: Ever Treated (Simplification for 2x2)
     df['treated'] = (df['first_treat'] > 0).astype(int)
 
-    # Use a global pre/post split for simple 2x2 HTE
-    # Pre: 2003, Post: 2007 (comparing endpoints)
-    df['post'] = (df['year'] == 2007).astype(int)
-
-    # Filter to just pre and post years for simple 2x2
+    # Simplification: Compare 2003 (Pre) vs 2007 (Post)
+    # This turns the panel into a 2-period 2x2 setup for clear demonstration
     df = df[df['year'].isin([2003, 2007])].copy()
-
-    print(f"Loaded mpdta data: {len(df)} observations")
-    print(f"  - Counties: {df['countyreal'].nunique()}")
-    print(f"  - Years: {sorted(df['year'].unique())}")
-    print(f"  - Treatment cohorts: {sorted([c for c in df['first_treat'].unique() if c > 0])}")
+    df['post'] = (df['year'] == 2007).astype(int)
 
     return df
 
@@ -155,296 +109,210 @@ def main():
     # =========================================================================
     # Step 1: Load Data
     # =========================================================================
-    print("\n[1] Loading mpdta data...")
-
+    print("\n[1] Loading Data...")
     df = load_hte_data()
-
-    print("\nData structure:")
-    print(f"  Treated counties (ever): {df[df['treated']==1]['countyreal'].nunique()}")
-    print(f"  Never-treated counties: {df[df['treated']==0]['countyreal'].nunique()}")
-    print(f"  High population counties: {(df['high_pop']==1).sum()} obs")
-    print(f"  Low population counties: {(df['high_pop']==0).sum()} obs")
-
-    print("""
-Dataset: mpdta from the 'did' R package
-  - 500 US counties, 2003-2007
-  - Outcome: log employment (lemp)
-  - Treatment: minimum wage increase
-  - Subgroup: county population (lpop)
-    """)
+    print(f"Data: {len(df)} rows (2003 & 2007 only)")
+    print(f"Subgroups: High Pop vs Low Pop counties")
 
     # =========================================================================
-    # Step 2: Simple DiD (Pooled)
+    # Step 2: Simple Pooled DiD
     # =========================================================================
-    print("\n" + "=" * 60)
-    print("[2] Simple DiD (Pooled)")
-    print("=" * 60)
-
-    # DiD for all data
-    simple_did = did_2x2(df, outcome_col='lemp', treat_col='treated', post_col='post')
-    print(f"\nSimple DiD (all counties): {simple_did:.4f}")
-    print("This pools all counties regardless of characteristics.")
+    print("\n[2] Simple Pooled DiD...")
+    pooled_att = did_2x2(df)
+    print(f"Pooled ATT: {pooled_att:.4f}")
+    print("This estimates the average effect across ALL counties.")
 
     # =========================================================================
-    # Step 3: Heterogeneous Treatment Effects
+    # Step 3: Heterogeneous Treatment Effects (Manual)
     # =========================================================================
-    print("\n" + "=" * 60)
-    print("[3] Heterogeneous Treatment Effects (HTE)")
-    print("=" * 60)
+    print("\n[3] Heterogeneous Treatment Effects (Split-Sample)...")
 
-    print("\nSplit-sample DiD by county population:")
+    hte_results = calculate_hte(df, 'high_pop')
 
-    hte_results = calculate_hte(df, 'high_pop', outcome_col='lemp',
-                                treat_col='treated', post_col='post')
+    # Map binary 0/1 back to labels for display
+    hte_results['label'] = hte_results['subgroup'].map({0: 'Low Population', 1: 'High Population'})
 
-    print("\n" + "-" * 60)
+    print("\nResults by Subgroup:")
+    print("-" * 60)
     for _, row in hte_results.iterrows():
-        group = "High Population" if row['subgroup'] == 1 else "Low Population"
         sig = "*" if abs(row['att']) > 1.96 * row['se'] else ""
-        print(f"  {group}: ATT = {row['att']:.4f} (SE: {row['se']:.4f}) {sig}")
+        print(f"{row['label']:<15}: ATT = {row['att']:>7.4f} (SE: {row['se']:.4f}) {sig}")
     print("-" * 60)
 
-    print("""
-Interpretation:
-  - Compare effects for high vs low population counties
-  - Differences may reflect labor market structure
-  - Larger counties may have more competitive labor markets
-    """)
+    # Calculate difference
+    att_diff = hte_results.loc[1, 'att'] - hte_results.loc[0, 'att']
+    print(f"\nDifference (High - Low): {att_diff:.4f}")
+    print("Does the policy affect large counties differently than small ones?")
 
     # =========================================================================
-    # Step 4: Triple Difference (DDD)
+    # Step 4: Using differences Package (if available)
     # =========================================================================
     print("\n" + "=" * 60)
-    print("[4] Triple Difference (DDD)")
-    print("=" * 60)
-
-    print("\nDDD = DiD(high_pop) - DiD(low_pop)")
-    print("      = Compare treatment effects across subgroups")
-
-    ddd_results = calculate_ddd(df, eligible_col='high_pop', outcome_col='lemp',
-                                treat_col='treated', post_col='post')
-
-    print(f"\n" + "-" * 60)
-    print(f"DiD for High Population:  {ddd_results['did_eligible']:.4f}")
-    print(f"DiD for Low Population:   {ddd_results['did_placebo']:.4f}")
-    print(f"-" * 60)
-    print(f"DDD (High - Low Pop):     {ddd_results['ddd']:.4f} (SE: {ddd_results['se']:.4f})")
-    print("-" * 60)
-
-    print(f"""
-Interpretation:
-  - DDD here measures the DIFFERENCE in treatment effects
-    between high and low population counties
-  - A non-zero DDD indicates heterogeneous effects by county size
-    """)
-
-    # =========================================================================
-    # Step 5: Manual DDD Decomposition (8 Cells)
-    # =========================================================================
-    print("\n" + "=" * 60)
-    print("[5] DDD Decomposition (8 Cells)")
-    print("=" * 60)
-
-    # Calculate all 8 cell means
-    cells = {}
-    for treated in [0, 1]:
-        for post in [0, 1]:
-            for high_pop in [0, 1]:
-                mask = (df['treated'] == treated) & (df['post'] == post) & (df['high_pop'] == high_pop)
-                mean_y = df.loc[mask, 'lemp'].mean()
-                key = f"T{treated}_P{post}_H{high_pop}"
-                cells[key] = mean_y
-
-    print("\n8-Cell Means Table:")
-    print("-" * 70)
-    print(f"{'Group':<20} {'Never Treated':<25} {'Ever Treated':<25}")
-    print(f"{'':20} {'Pre':>10} {'Post':>10}   {'Pre':>10} {'Post':>10}")
-    print("-" * 70)
-    print(f"{'Low Population':<20} {cells['T0_P0_H0']:>10.4f} {cells['T0_P1_H0']:>10.4f}   "
-          f"{cells['T1_P0_H0']:>10.4f} {cells['T1_P1_H0']:>10.4f}")
-    print(f"{'High Population':<20} {cells['T0_P0_H1']:>10.4f} {cells['T0_P1_H1']:>10.4f}   "
-          f"{cells['T1_P0_H1']:>10.4f} {cells['T1_P1_H1']:>10.4f}")
-    print("-" * 70)
-
-    # Manual calculation
-    did_h_treat = (cells['T1_P1_H1'] - cells['T1_P0_H1'])
-    did_h_ctrl = (cells['T0_P1_H1'] - cells['T0_P0_H1'])
-    did_high_manual = did_h_treat - did_h_ctrl
-
-    did_l_treat = (cells['T1_P1_H0'] - cells['T1_P0_H0'])
-    did_l_ctrl = (cells['T0_P1_H0'] - cells['T0_P0_H0'])
-    did_low_manual = did_l_treat - did_l_ctrl
-
-    ddd_manual = did_high_manual - did_low_manual
-
-    print(f"\nManual Calculation:")
-    print(f"  DiD(High Pop) = ({cells['T1_P1_H1']:.4f} - {cells['T1_P0_H1']:.4f}) - "
-          f"({cells['T0_P1_H1']:.4f} - {cells['T0_P0_H1']:.4f}) = {did_high_manual:.4f}")
-    print(f"  DiD(Low Pop)  = ({cells['T1_P1_H0']:.4f} - {cells['T1_P0_H0']:.4f}) - "
-          f"({cells['T0_P1_H0']:.4f} - {cells['T0_P0_H0']:.4f}) = {did_low_manual:.4f}")
-    print(f"  DDD = {did_high_manual:.4f} - {did_low_manual:.4f} = {ddd_manual:.4f}")
-
-    # =========================================================================
-    # Step 6: Using differences Package (if available)
-    # =========================================================================
-    print("\n" + "=" * 60)
-    print("[6] Using 'differences' Package for HTE")
+    print("[4] Using 'differences' Package for HTE")
     print("=" * 60)
 
     try:
-        from differences import ATTgt, simulate_data
+        from differences import ATTgt
 
-        # Generate data with multiple samples (for HTE)
-        panel_data = simulate_data(samples=2)
+        # Reload full mpdta data (not filtered) for proper staggered DiD
+        # This shows HTE works even in the complex staggered setting
+        df_full = load_mpdta()
+        df_full.columns = [c.replace('.', '_') for c in df_full.columns]
 
-        att_gt = ATTgt(data=panel_data, cohort_name='cohort')
-        results = att_gt.fit(formula='y', split_sample_by='samples')
+        # Create population subgroup
+        median_lpop = df_full['lpop'].median()
+        df_full['high_pop'] = (df_full['lpop'] >= median_lpop).astype(int)
 
-        print("\nATT by sample (from 'differences' package):")
+        # Fix for differences package: NaN for never-treated + MultiIndex
+        df_full['first_treat'] = np.where(df_full['first_treat'] == 0, np.nan, df_full['first_treat'])
+        df_full = df_full.set_index(['countyreal', 'year'])
+
+        # Use ATTgt with split_sample_by
+        print("Running Callaway-Sant'Anna by subgroup...")
+        att_gt = ATTgt(data=df_full, cohort_name='first_treat')
+        results = att_gt.fit(formula='lemp', split_sample_by='high_pop')
+
+        print("\nATT by population size (from 'differences' package):")
         print(results)
 
-        # Aggregate
+        # Aggregate to simple ATT per group
         simple_agg = att_gt.aggregate('simple')
-        print("\nSimple aggregation by sample:")
+        print("\nSimple aggregation by subgroup:")
         print(simple_agg)
 
     except ImportError:
         print("\n'differences' package not installed.")
         print("Install with: pip install differences")
-        print("Showing manual calculations only.")
     except Exception as e:
         print(f"\n'differences' package encountered an error: {e}")
-        print("This may be due to numpy/linearmodels version incompatibility.")
-        print("Showing manual calculations only.")
 
     # =========================================================================
-    # Step 7: Visualizations
+    # Step 5: Visualization
     # =========================================================================
     print("\n" + "=" * 60)
-    print("[7] Creating Visualizations")
+    print("[5] Creating Showcase Visualizations")
     print("=" * 60)
+    # plt.style.use('seaborn-v0_8-whitegrid') # Already set in utils
 
-    # Plot 1: Trends by Group
-    fig1, axes = plt.subplots(1, 2, figsize=(14, 5))
+    # --- Plot 1: Trends by Group (Visualizing the Mechanism) ---
+    fig1, axes = plt.subplots(1, 2, figsize=(14, 6))
 
     for ax, (pop_val, title) in zip(axes, [(0, 'Low Population'), (1, 'High Population')]):
         df_sub = df[df['high_pop'] == pop_val]
 
-        # Treated counties
-        treat_means = df_sub[df_sub['treated'] == 1].groupby('year')['lemp'].mean()
-        ax.plot(treat_means.index, treat_means.values, 'r-o', linewidth=2,
-                markersize=8, label='Ever Treated')
+        # Calculate means
+        treat_pre = df_sub[(df_sub['treated'] == 1) & (df_sub['post'] == 0)]['lemp'].mean()
+        treat_post = df_sub[(df_sub['treated'] == 1) & (df_sub['post'] == 1)]['lemp'].mean()
+        ctrl_pre = df_sub[(df_sub['treated'] == 0) & (df_sub['post'] == 0)]['lemp'].mean()
+        ctrl_post = df_sub[(df_sub['treated'] == 0) & (df_sub['post'] == 1)]['lemp'].mean()
 
-        # Control counties
-        ctrl_means = df_sub[df_sub['treated'] == 0].groupby('year')['lemp'].mean()
-        ax.plot(ctrl_means.index, ctrl_means.values, 'b-o', linewidth=2,
-                markersize=8, label='Never Treated')
+        # Plot Treated
+        ax.plot([0, 1], [treat_pre, treat_post], 'o-', color=COLORS['treat'], linewidth=3, label='Treated', markersize=10)
 
-        ax.set_xlabel('Year', fontsize=12)
-        ax.set_ylabel('Log Employment', fontsize=12)
-        ax.set_title(title, fontsize=14)
+        # Plot Control
+        ax.plot([0, 1], [ctrl_pre, ctrl_post], 'o--', color=COLORS['control'], linewidth=2, label='Control', markersize=8)
+
+        # Plot Counterfactual
+        cf = treat_pre + (ctrl_post - ctrl_pre)
+        ax.plot([0, 1], [treat_pre, cf], 'o:', color=COLORS['counterfactual'], alpha=0.6, label='Counterfactual')
+
+        # Annotate ATT
+        att_val = hte_results[hte_results['subgroup'] == pop_val]['att'].values[0]
+        ax.annotate(f"ATT = {att_val:.3f}", xy=(1.05, (treat_post + cf) / 2),
+                    color=COLORS['treat'], fontweight='bold', fontsize=12)
+        ax.annotate('', xy=(1.02, treat_post), xytext=(1.02, cf),
+                    arrowprops=dict(arrowstyle='<->', color=COLORS['treat'], lw=2))
+
+        ax.set_xticks([0, 1])
+        ax.set_xticklabels(['Pre (2003)', 'Post (2007)'])
+        ax.set_title(title, fontsize=14, fontweight='bold')
+        ax.set_ylabel("Log Employment")
         ax.legend()
-        ax.grid(True, alpha=0.3)
+        ax.grid(True, alpha=0.3, color=COLORS['grid'])
+        
+        # Clean spines
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
 
-    fig1.suptitle('Trends by Population Size\n(HTE compares effects across county types)', fontsize=14, y=1.02)
-    fig1.tight_layout()
-    fig1.savefig(FIGS_DIR / 'hte_trends.png', dpi=150, bbox_inches='tight')
+    fig1.suptitle('Heterogeneous Trends: Treatment Effects by Population Size', fontsize=16)
+    plt.tight_layout()
+    plt.savefig(FIGS_DIR / 'hte_trends.png', dpi=300)
     print(f"Saved: {FIGS_DIR / 'hte_trends.png'}")
 
-    # Plot 2: HTE Comparison Bar Chart
+    # --- Plot 2: Forest Plot (The Standard for HTE) ---
     fig2, ax2 = plt.subplots(figsize=(10, 6))
 
-    groups = ['Low Population', 'High Population', 'DDD\n(Difference)']
-    values = [ddd_results['did_placebo'], ddd_results['did_eligible'], ddd_results['ddd']]
-    colors = ['gray', 'steelblue', 'darkgreen']
+    y_pos = np.arange(len(hte_results))
+    atts = hte_results['att']
+    errors = 1.96 * hte_results['se']
+    labels = hte_results['label']
 
-    bars = ax2.bar(groups, values, color=colors, alpha=0.8, edgecolor='black', linewidth=2)
+    # Plot Overall Pooled Effect Line
+    ax2.axvline(pooled_att, color=COLORS['counterfactual'], linestyle='--', linewidth=1, label=f'Pooled ATT ({pooled_att:.3f})')
+    ax2.axvline(0, color='black', linewidth=1)
 
-    ax2.axhline(y=0, color='black', linewidth=1)
+    # Plot Points with Error Bars
+    ax2.errorbar(atts, y_pos, xerr=errors, fmt='o', markersize=12,
+                 color=COLORS['treat'], ecolor='black', capsize=5, linewidth=2, label='Subgroup ATT')
 
-    # Add value labels
-    for bar, val in zip(bars, values):
-        height = bar.get_height()
-        ax2.annotate(f'{val:.4f}',
-                    xy=(bar.get_x() + bar.get_width()/2, height),
-                    xytext=(0, 5 if height >= 0 else -15),
-                    textcoords='offset points',
-                    ha='center', fontsize=12, fontweight='bold')
+    # Formatting
+    ax2.set_yticks(y_pos)
+    ax2.set_yticklabels(labels, fontsize=12)
+    ax2.set_xlabel('Treatment Effect (Log Employment)', fontsize=12)
+    ax2.set_title('Forest Plot: Heterogeneous Treatment Effects', fontsize=16, fontweight='bold')
+    ax2.legend()
+    ax2.grid(True, alpha=0.3, color=COLORS['grid'])
+    
+    # Clean spines
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
 
-    ax2.set_ylabel('Treatment Effect', fontsize=12)
-    ax2.set_title('HTE Decomposition\nDifference in effects between high and low population counties',
-                  fontsize=14)
-    ax2.grid(True, alpha=0.3, axis='y')
+    # Add text for difference
+    ax2.text(pooled_att, -0.8, "Do these intervals overlap?", ha='center', color=COLORS['text'], fontstyle='italic')
 
-    fig2.tight_layout()
-    fig2.savefig(FIGS_DIR / 'hte_decomposition.png', dpi=150, bbox_inches='tight')
-    print(f"Saved: {FIGS_DIR / 'hte_decomposition.png'}")
-
-    # Plot 3: HTE Forest Plot
-    fig3, ax3 = plt.subplots(figsize=(10, 5))
-
-    y_pos = [1, 0]
-    atts = [hte_results.loc[hte_results['subgroup']==1, 'att'].values[0],
-            hte_results.loc[hte_results['subgroup']==0, 'att'].values[0]]
-    ses = [hte_results.loc[hte_results['subgroup']==1, 'se'].values[0],
-           hte_results.loc[hte_results['subgroup']==0, 'se'].values[0]]
-    labels = ['High Population', 'Low Population']
-
-    # Plot points and CIs
-    for y, att, se, label in zip(y_pos, atts, ses, labels):
-        ax3.errorbar(att, y, xerr=1.96*se, fmt='o', markersize=10,
-                    capsize=5, linewidth=2, label=label)
-
-    ax3.axvline(x=0, color='gray', linestyle='-', linewidth=1)
-    ax3.set_xlabel('Treatment Effect (ATT)', fontsize=12)
-    ax3.set_yticks(y_pos)
-    ax3.set_yticklabels(labels)
-    ax3.set_title('Heterogeneous Treatment Effects\n(Split-Sample DiD)', fontsize=14)
-    ax3.grid(True, alpha=0.3, axis='x')
-
-    fig3.tight_layout()
-    fig3.savefig(FIGS_DIR / 'hte_forest.png', dpi=150, bbox_inches='tight')
+    plt.tight_layout()
+    plt.savefig(FIGS_DIR / 'hte_forest.png', dpi=300)
     print(f"Saved: {FIGS_DIR / 'hte_forest.png'}")
 
-    # =========================================================================
-    # Step 8: Summary
-    # =========================================================================
-    print("\n" + "=" * 60)
-    print("[8] Summary")
-    print("=" * 60)
+    # --- Plot 3: Decomposition Bar (The Triple Difference) ---
+    fig3, ax3 = plt.subplots(figsize=(8, 6))
+    
+    # Data
+    att_low = hte_results.loc[0, 'att']
+    att_high = hte_results.loc[1, 'att']
+    diff = att_high - att_low
+    
+    labels = ['Low Pop\n(ATT)', 'High Pop\n(ATT)', 'Difference\n(High - Low)']
+    values = [att_low, att_high, diff]
+    colors = [COLORS['control'], COLORS['treat'], COLORS['counterfactual']]
+    
+    bars = ax3.bar(labels, values, color=colors, edgecolor='black', alpha=0.8, width=0.6)
+    ax3.axhline(0, color='black', linewidth=1)
+    
+    # Add values
+    for bar, v in zip(bars, values):
+        height = bar.get_height()
+        offset = 0.005 if height > 0 else -0.015
+        ax3.text(bar.get_x() + bar.get_width()/2, height + offset, f"{v:.3f}",
+                 ha='center', fontweight='bold', color=COLORS['text'])
+                 
+    ax3.set_title('Decomposition of Heterogeneity\n(Triple Difference = Difference in ATTs)', fontsize=14, fontweight='bold')
+    ax3.set_ylabel('Treatment Effect', fontsize=12)
+    ax3.grid(True, alpha=0.3, axis='y', color=COLORS['grid'])
+    
+    # Clean spines
+    ax3.spines['top'].set_visible(False)
+    ax3.spines['right'].set_visible(False)
+    
+    # Annotation
+    ax3.annotate('If this is non-zero,\neffects are heterogeneous', 
+                 xy=(2, diff), xytext=(2, diff + 0.05 if diff > 0 else diff - 0.05),
+                 ha='center', arrowprops=dict(arrowstyle='->', color=COLORS['text']))
 
-    print(f"""
-HETEROGENEOUS TREATMENT EFFECTS (HTE)
-=====================================
-High Population:  ATT = {hte_results.loc[hte_results['subgroup']==1, 'att'].values[0]:.4f}
-Low Population:   ATT = {hte_results.loc[hte_results['subgroup']==0, 'att'].values[0]:.4f}
+    plt.tight_layout()
+    plt.savefig(FIGS_DIR / 'hte_decomposition.png', dpi=300)
+    print(f"Saved: {FIGS_DIR / 'hte_decomposition.png'}")
 
-HTE reveals how treatment effects vary across county population sizes.
-
-TRIPLE DIFFERENCE (DDD)
-=======================
-DiD (High Pop):     {ddd_results['did_eligible']:.4f}
-DiD (Low Pop):      {ddd_results['did_placebo']:.4f}
-DDD (Difference):   {ddd_results['ddd']:.4f}
-
-The DDD measures whether treatment effects differ significantly
-between high and low population counties.
-
-KEY INSIGHTS
-============
-1. HTE: Run DiD separately by subgroup, compare effects
-2. DDD: Difference between subgroup DiDs
-3. Both methods are just combinations of 2×2 comparisons
-4. Use HTE to understand effect heterogeneity
-
-WHEN TO USE EACH
-================
-- HTE: When you want to know if effects vary by characteristics
-- DDD: When you have a within-unit control group
-- For Doubly Robust DDD with covariates, see Module 06
-    """)
-
-    plt.close('all')
     print("\n" + "=" * 60)
     print("Module 05 Complete!")
     print("=" * 60)

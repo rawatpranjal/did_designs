@@ -2,528 +2,316 @@
 Module 06: Triple Differences - The Robust Way
 
 This script demonstrates:
-1. Why naive DDD fails when covariate distributions differ
-2. The Doubly Robust DDD estimator (Ortiz-Villavicencio & Sant'Anna 2025)
-3. Visual comparison of bias between methods
+1. Why naive DDD can be biased when covariate distributions differ
+2. The Outcome Regression DDD estimator (inspired by Ortiz-Villavicencio & Sant'Anna 2025)
+3. Comparison using real-world policy data
 
-Dataset: Simulated Maternity Mandates scenario with covariate imbalance
+Dataset: Meyer, Viscusi, & Durbin (1995) - Worker's Compensation
+Source: Wooldridge package via Rdatasets
+
+Policy: Kentucky raised the cap on worker's compensation benefits.
+- Treated State (S=1): Kentucky
+- Control State (S=0): Michigan
+- Target Group (Q=1): High Earners (benefits increased)
+- Placebo Group (Q=0): Low Earners (benefits unchanged)
+- Outcome: Log duration of leave (ldurat)
 """
 
 import sys
 from pathlib import Path
 
+# Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import statsmodels.formula.api as smf
-from sklearn.linear_model import LinearRegression
 import warnings
 warnings.filterwarnings('ignore')
+
+from utils import load_injury, COLORS
 
 # Output directory
 FIGS_DIR = Path(__file__).parent / "figs"
 FIGS_DIR.mkdir(exist_ok=True)
 
-# True treatment effect (for simulation)
-TRUE_ATT = 5.0
-
-
-def make_ddd_data(n=5000, seed=123):
-    """
-    Generate DDD data with covariate imbalance.
-
-    Scenario: Maternity Mandates
-    - Policy affects women (target) in treated states
-    - Men serve as placebo group within states
-    - Covariate X (education) affects trends
-    - CRITICAL: X distribution differs between men and women in treated states
-
-    This imbalance breaks naive DDD but robust DDD handles it.
-    """
-    np.random.seed(seed)
-
-    # Generate cross-sectional data
-    df = pd.DataFrame({
-        'id': range(n),
-        'state_treat': np.random.choice([0, 1], n),  # S: State treatment
-        'is_female': np.random.choice([0, 1], n),    # Q: Target group (eligibility)
-    })
-
-    # Covariate X (e.g., Education level: 0=Low, 1=High)
-    # CRITICAL: X is correlated with State AND Gender
-    # Women in Treated States have higher education (the imbalance)
-    prob_x = 0.3 + 0.35 * df['state_treat'] * df['is_female']
-    df['X'] = np.random.binomial(1, prob_x)
-
-    # Expand to panel (Pre/Post)
-    df_pre = df.copy()
-    df_pre['post'] = 0
-    df_post = df.copy()
-    df_post['post'] = 1
-    df = pd.concat([df_pre, df_post]).reset_index(drop=True)
-
-    # Generate outcome Y
-    # Key: Trends depend on X (parallel trends only conditional on X)
-    base = 10.0
-
-    # Time trend depends on X
-    trend = 2.0 * df['X'] * df['post']
-
-    # Treatment effect: only for women in treated states, post-treatment
-    treatment_effect = TRUE_ATT * df['state_treat'] * df['is_female'] * df['post']
-
-    # Add noise
-    noise = np.random.normal(0, 1, len(df))
-
-    df['y'] = base + trend + treatment_effect + noise
-
-    return df
-
 
 def show_covariate_imbalance(df):
     """
-    Display the covariate imbalance that breaks naive DDD.
+    Display the covariate imbalance between high and low earners.
     """
-    # Get pre-period data only (to show baseline characteristics)
-    df_pre = df[df['post'] == 0].copy()
+    print("\nCovariate Comparison: High Earners vs Low Earners")
+    print("-" * 60)
 
-    # Calculate mean X by group
-    groups = df_pre.groupby(['state_treat', 'is_female'])['X'].mean().unstack()
-    groups.index = ['Control State', 'Treated State']
-    groups.columns = ['Men', 'Women']
+    # Calculate means
+    high = df[df['highearn'] == 1]
+    low = df[df['highearn'] == 0]
 
-    print("\nMean Covariate X (Education) by Group:")
-    print("-" * 50)
-    print(groups.round(3))
-    print("-" * 50)
+    age_high, age_low = high['age'].mean(), low['age'].mean()
+    marr_high, marr_low = high['married'].mean(), low['married'].mean()
+    male_high, male_low = high['male'].mean(), low['male'].mean()
 
-    # Calculate the imbalance
-    imbalance = groups.loc['Treated State', 'Women'] - groups.loc['Treated State', 'Men']
-    print(f"\nImbalance in Treated State: Women - Men = {imbalance:.3f}")
-    print("(Women are more educated than Men in treated states)")
+    print(f"{'Covariate':<15} {'High Earners':>15} {'Low Earners':>15} {'Difference':>15}")
+    print("-" * 60)
+    print(f"{'Age':<15} {age_high:>15.2f} {age_low:>15.2f} {age_high - age_low:>+15.2f}")
+    print(f"{'Married (%)':<15} {marr_high*100:>15.1f} {marr_low*100:>15.1f} {(marr_high - marr_low)*100:>+15.1f}")
+    print(f"{'Male (%)':<15} {male_high*100:>15.1f} {male_low*100:>15.1f} {(male_high - male_low)*100:>+15.1f}")
+    print("-" * 60)
 
-    return groups
+    print("\nKey Finding: High earners are OLDER, more MALE, and more MARRIED.")
+    print("If injury duration trends depend on these factors (which they likely do),")
+    print("naive DDD comparing High vs Low will be biased.")
+
+    return {
+        'age': [age_low, age_high],
+        'married': [marr_low, marr_high],
+        'male': [male_low, male_high]
+    }
 
 
 def naive_ddd_ols(df):
     """
     Naive DDD using 3-way fixed effects OLS.
-
-    This is the standard approach that fails with covariate imbalance.
+    Model: ldurat ~ ky * highearn * afchnge + covariates
     """
-    # Standard triple interaction
-    model = smf.ols("y ~ state_treat * is_female * post + X", data=df).fit()
-
-    return model.params['state_treat:is_female:post']
-
-
-def naive_ddd_manual(df):
-    """
-    Naive DDD calculated manually as DiD_women - DiD_men.
-
-    This shows explicitly what the OLS is doing.
-    """
-    # DiD for women
-    df_women = df[df['is_female'] == 1]
-    did_women = (
-        (df_women[(df_women['state_treat']==1) & (df_women['post']==1)]['y'].mean() -
-         df_women[(df_women['state_treat']==1) & (df_women['post']==0)]['y'].mean()) -
-        (df_women[(df_women['state_treat']==0) & (df_women['post']==1)]['y'].mean() -
-         df_women[(df_women['state_treat']==0) & (df_women['post']==0)]['y'].mean())
-    )
-
-    # DiD for men
-    df_men = df[df['is_female'] == 0]
-    did_men = (
-        (df_men[(df_men['state_treat']==1) & (df_men['post']==1)]['y'].mean() -
-         df_men[(df_men['state_treat']==1) & (df_men['post']==0)]['y'].mean()) -
-        (df_men[(df_men['state_treat']==0) & (df_men['post']==1)]['y'].mean() -
-         df_men[(df_men['state_treat']==0) & (df_men['post']==0)]['y'].mean())
-    )
-
-    return did_women - did_men, did_women, did_men
+    # Standard linear control
+    model = smf.ols("ldurat ~ ky * highearn * afchnge + age + male + married", data=df).fit(cov_type='HC1')
+    return model.params['ky:highearn:afchnge'], model.bse['ky:highearn:afchnge']
 
 
 def robust_ddd(df):
     """
-    Doubly Robust DDD estimator (Ortiz-Villavicencio & Sant'Anna 2025).
+    Outcome Regression DDD estimator (Target-Adjusted).
+    Based on Ortiz-Villavicencio & Sant'Anna (2025), Section 4.1.
 
-    Key insight: Instead of 2 DiDs, we need 3 comparisons.
-    All counterfactuals are evaluated at the TARGET group's covariate distribution.
+    Key insight: Predict counterfactuals at the TARGET group's covariate distribution.
+
+    1. Fit outcome model E[Y|X] for every group/time cell.
+    2. Predict Y_hat for the TARGET group (KY High Post) using these models.
+    3. Compute DDD using these adjusted means.
     """
-    # Calculate change in Y (Delta Y = Y_post - Y_pre)
-    df_wide = df.pivot_table(index='id', columns='post', values='y').reset_index()
-    df_wide.columns = ['id', 'y_pre', 'y_post']
-    df_wide['dy'] = df_wide['y_post'] - df_wide['y_pre']
+    # Target group: Kentucky High Earners, Post-policy
+    target_mask = (df['ky'] == 1) & (df['highearn'] == 1) & (df['afchnge'] == 1)
+    target_data = df[target_mask].copy()
 
-    # Merge back covariates (from pre-period)
-    df_pre = df[df['post'] == 0][['id', 'state_treat', 'is_female', 'X']]
-    df_wide = df_wide.merge(df_pre, on='id')
+    # Dictionary to store adjusted means
+    adj_means = {}
 
-    # Define the 4 groups
-    # S=state_treat, Q=is_female
-    mask_s0_q0 = (df_wide['state_treat'] == 0) & (df_wide['is_female'] == 0)  # Control Men
-    mask_s0_q1 = (df_wide['state_treat'] == 0) & (df_wide['is_female'] == 1)  # Control Women
-    mask_s1_q0 = (df_wide['state_treat'] == 1) & (df_wide['is_female'] == 0)  # Treated Men
-    mask_s1_q1 = (df_wide['state_treat'] == 1) & (df_wide['is_female'] == 1)  # Treated Women (TARGET)
+    # Iterate over the 8 cells (2 states * 2 groups * 2 periods)
+    # The target cell is (1, 1, 1)
+    for ky in [0, 1]:
+        for high in [0, 1]:
+            for post in [0, 1]:
 
-    # Fit outcome regression models for 3 comparison groups
-    # Model: E[Delta Y | X] for each group
+                # Identify the specific cell
+                mask = (df['ky'] == ky) & (df['highearn'] == high) & (df['afchnge'] == post)
+                cell_data = df[mask]
 
-    # Model 1: Control State, Men (S=0, Q=0) - Base trend
-    model_s0_q0 = smf.ols("dy ~ X", data=df_wide[mask_s0_q0]).fit()
+                if len(cell_data) < 5:
+                    adj_means[(ky, high, post)] = np.nan
+                    continue
 
-    # Model 2: Control State, Women (S=0, Q=1) - Gender trend
-    model_s0_q1 = smf.ols("dy ~ X", data=df_wide[mask_s0_q1]).fit()
+                # Fit model: E[Y | X] for THIS cell
+                model = smf.ols("ldurat ~ age + male + married", data=cell_data).fit()
 
-    # Model 3: Treated State, Men (S=1, Q=0) - State shock
-    model_s1_q0 = smf.ols("dy ~ X", data=df_wide[mask_s1_q0]).fit()
+                # Predict: What if the TARGET group had the parameters of THIS cell?
+                # This standardizes everything to the Target's covariate distribution
+                pred = model.predict(target_data)
 
-    # Target group: Treated State, Women (S=1, Q=1)
-    target_group = df_wide[mask_s1_q1]
+                adj_means[(ky, high, post)] = pred.mean()
 
-    # Observed change for target group
-    observed_change = target_group['dy'].mean()
+    # Compute DDD using the adjusted means
+    try:
+        # Kentucky DiD (Adjusted)
+        ky_high_diff = adj_means[(1, 1, 1)] - adj_means[(1, 1, 0)]
+        ky_low_diff  = adj_means[(1, 0, 1)] - adj_means[(1, 0, 0)]
+        ky_did = ky_high_diff - ky_low_diff
 
-    # Predict counterfactuals AT THE TARGET GROUP'S COVARIATE DISTRIBUTION
-    # This is the key insight from Ortiz-Villavicencio & Sant'Anna
-    cf_s0_q0 = model_s0_q0.predict(target_group).mean()  # Base trend
-    cf_s0_q1 = model_s0_q1.predict(target_group).mean()  # Control Women trend
-    cf_s1_q0 = model_s1_q0.predict(target_group).mean()  # Treated Men trend
+        # Michigan DiD (Adjusted)
+        mi_high_diff = adj_means[(0, 1, 1)] - adj_means[(0, 1, 0)]
+        mi_low_diff  = adj_means[(0, 0, 1)] - adj_means[(0, 0, 0)]
+        mi_did = mi_high_diff - mi_low_diff
 
-    # DR-DDD Formula:
-    # ATT = (Observed - CF_men_treated) - (CF_women_control - CF_men_control)
-    #
-    # Intuition:
-    # (Observed - CF_men_treated) = Effect for women vs men in treated states
-    # (CF_women_control - CF_men_control) = Gender gap in control states
-    # Difference removes spurious gender differences
+        ddd_robust = ky_did - mi_did
 
-    att_ddd = (observed_change - cf_s1_q0) - (cf_s0_q1 - cf_s0_q0)
+        components = {
+            'ky_did': ky_did, 'mi_did': mi_did,
+            'ky_high': ky_high_diff, 'ky_low': ky_low_diff,
+            'mi_high': mi_high_diff, 'mi_low': mi_low_diff
+        }
+        return ddd_robust, components
 
-    return att_ddd, {
-        'observed': observed_change,
-        'cf_men_ctrl': cf_s0_q0,
-        'cf_women_ctrl': cf_s0_q1,
-        'cf_men_treat': cf_s1_q0
-    }
+    except KeyError:
+        return np.nan, {}
 
 
-def bootstrap_se(df, estimator_func, n_boot=500, seed=42):
-    """
-    Bootstrap standard errors for an estimator.
-    """
-    np.random.seed(seed)
-
-    # Get unique IDs
-    ids = df['id'].unique()
-    n_ids = len(ids)
-
-    boot_estimates = []
-    for b in range(n_boot):
-        # Sample IDs with replacement
-        boot_ids = np.random.choice(ids, size=n_ids, replace=True)
-
-        # Build bootstrap sample (keeping panel structure)
-        boot_frames = []
-        for j, i in enumerate(boot_ids):
-            subset = df[df['id'] == i].copy()
-            subset['id'] = j  # Re-assign ID
-            boot_frames.append(subset)
-
-        df_boot = pd.concat(boot_frames, ignore_index=True)
-
+def bootstrap_se(df, estimator_func, n_boot=200):
+    """Simple bootstrap for SE."""
+    boot_ests = []
+    n = len(df)
+    for _ in range(n_boot):
+        idx = np.random.choice(n, n, replace=True)
         try:
-            result = estimator_func(df_boot)
-            if isinstance(result, tuple):
-                result = result[0]
-            boot_estimates.append(result)
+            est, _ = estimator_func(df.iloc[idx])
+            if not np.isnan(est):
+                boot_ests.append(est)
         except:
             continue
-
-    return np.std(boot_estimates)
+    return np.std(boot_ests)
 
 
 def main():
     print("=" * 70)
     print("Module 06: Triple Differences - The Robust Way")
-    print("Doubly Robust DDD (Ortiz-Villavicencio & Sant'Anna 2025)")
+    print("Meyer, Viscusi, & Durbin (1995) - Worker's Compensation")
     print("=" * 70)
 
-    # =========================================================================
-    # Step 1: Generate Data with Covariate Imbalance
-    # =========================================================================
-    print("\n[1] Generating DDD Data with Covariate Imbalance")
-    print("=" * 70)
+    # 1. Load Data
+    print("\n[1] Loading Data...")
+    df = load_injury()
+    # Ensure no missing values in covariates
+    df = df.dropna(subset=['ldurat', 'age', 'male', 'married', 'ky', 'highearn', 'afchnge'])
 
-    df = make_ddd_data(n=5000)
+    print(f"Dataset: {len(df)} observations")
+    print("Structure: 2 States (KY, MI) x 2 Groups (High/Low Earn) x 2 Periods")
 
-    print(f"\nDataset shape: {df.shape}")
-    print(f"Unique individuals: {df['id'].nunique()}")
-    print(f"Time periods: Pre (0), Post (1)")
+    # 2. Show Imbalance
+    print("\n[2] Checking Covariate Imbalance...")
+    imbalance_data = show_covariate_imbalance(df)
 
-    print(f"""
-Simulation Setup:
-  - Policy: Maternity Mandates
-  - Target group: Women in treated states
-  - Placebo group: Men (within-state control)
-  - Covariate X: Education (affects trends)
-  - TRUE TREATMENT EFFECT: {TRUE_ATT}
+    # 3. Naive Estimation
+    print("\n[3] Naive DDD (OLS with linear controls)...")
+    naive_est, naive_se = naive_ddd_ols(df)
+    print(f"Naive DDD:  {naive_est:.4f} (SE: {naive_se:.4f})")
 
-  KEY: Women in treated states have HIGHER education than men.
-       This creates covariate imbalance that biases naive DDD.
-    """)
+    # 4. Robust Estimation
+    print("\n[4] Robust DDD (Outcome Regression / Target-Adjusted)...")
+    robust_est, components = robust_ddd(df)
 
-    # =========================================================================
-    # Step 2: Show the Covariate Imbalance
-    # =========================================================================
-    print("\n[2] Covariate Imbalance Analysis")
-    print("=" * 70)
+    print("Bootstrapping SE (approx 5-10s)...")
+    robust_se = bootstrap_se(df, robust_ddd, n_boot=200)
 
-    cov_table = show_covariate_imbalance(df)
+    print(f"Robust DDD: {robust_est:.4f} (SE: {robust_se:.4f})")
 
-    print("""
-Why this matters:
-  - Trends depend on education (high education → larger trend)
-  - Women in treated states are more educated
-  - Naive DDD uses men's covariate distribution to predict counterfactual
-  - This underestimates the counterfactual trend for women → BIAS
-    """)
-
-    # =========================================================================
-    # Step 3: Naive DDD (Shows the Bias)
-    # =========================================================================
-    print("\n[3] Naive DDD (Biased)")
-    print("=" * 70)
-
-    # OLS approach
-    naive_ols = naive_ddd_ols(df)
-
-    # Manual approach (for decomposition)
-    naive_manual, did_women, did_men = naive_ddd_manual(df)
-
-    print(f"\nNaive DDD Decomposition:")
+    # 5. Comparison
+    print("\n[5] Comparison")
     print("-" * 50)
-    print(f"  DiD for Women:        {did_women:.4f}")
-    print(f"  DiD for Men:          {did_men:.4f}")
+    print(f"{'Method':<20} {'Estimate':>10} {'SE':>10}")
     print("-" * 50)
-    print(f"  Naive DDD (manual):   {naive_manual:.4f}")
-    print(f"  Naive DDD (OLS):      {naive_ols:.4f}")
-    print("-" * 50)
-    print(f"  TRUE EFFECT:          {TRUE_ATT:.4f}")
-    print(f"  BIAS:                 {naive_ols - TRUE_ATT:.4f} ({(naive_ols - TRUE_ATT)/TRUE_ATT*100:.1f}%)")
-
-    print("""
-Why is naive DDD biased?
-  - DiD_men uses men's covariate distribution
-  - But we want counterfactual for WOMEN (different distribution)
-  - The education imbalance creates spurious differences in trends
-    """)
-
-    # =========================================================================
-    # Step 4: Robust DDD (Corrects the Bias)
-    # =========================================================================
-    print("\n[4] Doubly Robust DDD (Ortiz-Villavicencio & Sant'Anna 2025)")
-    print("=" * 70)
-
-    robust_att, components = robust_ddd(df)
-
-    print(f"\nDR-DDD Decomposition:")
-    print("-" * 50)
-    print("Counterfactuals evaluated at TARGET group's covariate distribution:")
-    print(f"  Observed (Women, Treated):      {components['observed']:.4f}")
-    print(f"  CF Men, Control (base trend):   {components['cf_men_ctrl']:.4f}")
-    print(f"  CF Women, Control (gender gap): {components['cf_women_ctrl']:.4f}")
-    print(f"  CF Men, Treated (state shock):  {components['cf_men_treat']:.4f}")
+    print(f"{'Naive (OLS)':<20} {naive_est:>10.4f} {naive_se:>10.4f}")
+    print(f"{'Robust (OR)':<20} {robust_est:>10.4f} {robust_se:>10.4f}")
     print("-" * 50)
 
-    # Show the formula
-    term1 = components['observed'] - components['cf_men_treat']
-    term2 = components['cf_women_ctrl'] - components['cf_men_ctrl']
-
-    print(f"\nFormula: ATT = (Observed - CF_men_treat) - (CF_women_ctrl - CF_men_ctrl)")
-    print(f"         ATT = ({components['observed']:.4f} - {components['cf_men_treat']:.4f}) - "
-          f"({components['cf_women_ctrl']:.4f} - {components['cf_men_ctrl']:.4f})")
-    print(f"         ATT = {term1:.4f} - {term2:.4f}")
-    print(f"         ATT = {robust_att:.4f}")
-    print("-" * 50)
-    print(f"  TRUE EFFECT:          {TRUE_ATT:.4f}")
-    print(f"  BIAS:                 {robust_att - TRUE_ATT:.4f} ({(robust_att - TRUE_ATT)/TRUE_ATT*100:.1f}%)")
+    diff = robust_est - naive_est
+    print(f"Difference: {diff:.4f}")
+    print("The difference represents the bias removed by properly adjusting for covariates.")
 
     # =========================================================================
-    # Step 5: Bootstrap Standard Errors
+    # Step 6: Visualizations
     # =========================================================================
-    print("\n[5] Bootstrap Standard Errors")
-    print("=" * 70)
+    print("\n[6] Creating Showcase Visualizations...")
+    # plt.style.use('seaborn-v0_8-whitegrid') # Already set in utils
 
-    print("\nComputing bootstrap SEs (this may take a moment)...")
+    # --- Plot 1: Covariate Imbalance ---
+    fig1, axes = plt.subplots(1, 2, figsize=(12, 5))
 
-    se_naive = bootstrap_se(df, naive_ddd_ols, n_boot=200)
-    se_robust = bootstrap_se(df, lambda x: robust_ddd(x)[0], n_boot=200)
+    # Age
+    axes[0].bar(['Low Earners', 'High Earners'], imbalance_data['age'],
+                color=[COLORS['control'], COLORS['treat']], alpha=0.8)
+    axes[0].set_title("Mean Age", fontsize=14)
+    axes[0].set_ylabel("Years")
+    axes[0].grid(True, alpha=0.3, axis='y', color=COLORS['grid'])
+    axes[0].spines['top'].set_visible(False)
+    axes[0].spines['right'].set_visible(False)
 
-    print(f"\nStandard Errors:")
-    print("-" * 50)
-    print(f"  Naive DDD:   {naive_ols:.4f} (SE: {se_naive:.4f})")
-    print(f"  Robust DDD:  {robust_att:.4f} (SE: {se_robust:.4f})")
-    print("-" * 50)
+    # Married
+    axes[1].bar(['Low Earners', 'High Earners'], [x*100 for x in imbalance_data['married']],
+                color=[COLORS['control'], COLORS['treat']], alpha=0.8)
+    axes[1].set_title("Married (%)", fontsize=14)
+    axes[1].set_ylabel("Percent")
+    axes[1].grid(True, alpha=0.3, axis='y', color=COLORS['grid'])
+    axes[1].spines['top'].set_visible(False)
+    axes[1].spines['right'].set_visible(False)
 
-    # =========================================================================
-    # Step 6: Comparison Visualization
-    # =========================================================================
-    print("\n[6] Creating Visualizations")
-    print("=" * 70)
-
-    # Plot 1: Bias Comparison Bar Chart
-    fig1, ax1 = plt.subplots(figsize=(10, 6))
-
-    methods = ['True ATT', 'Naive DDD\n(3WFE)', 'Robust DDD\n(DR)']
-    estimates = [TRUE_ATT, naive_ols, robust_att]
-    errors = [0, se_naive, se_robust]
-    colors = ['green', 'red', 'blue']
-
-    bars = ax1.bar(methods, estimates, yerr=[1.96*e for e in errors],
-                   color=colors, alpha=0.7, edgecolor='black', linewidth=2,
-                   capsize=5)
-
-    ax1.axhline(y=TRUE_ATT, color='green', linestyle='--', linewidth=2,
-                label=f'True Effect = {TRUE_ATT}')
-
-    # Add value labels
-    for bar, est, err in zip(bars, estimates, errors):
-        height = bar.get_height()
-        label = f'{est:.2f}'
-        if err > 0:
-            label += f'\n(SE: {err:.2f})'
-        ax1.annotate(label,
-                    xy=(bar.get_x() + bar.get_width()/2, height),
-                    xytext=(0, 10),
-                    textcoords='offset points',
-                    ha='center', fontsize=11, fontweight='bold')
-
-    ax1.set_ylabel('Treatment Effect Estimate', fontsize=12)
-    ax1.set_title('Triple Differences: Naive vs. Robust\n'
-                  'Naive DDD is biased when covariate distributions differ', fontsize=14)
-    ax1.legend(loc='upper right')
-    ax1.grid(True, alpha=0.3, axis='y')
-    ax1.set_ylim(0, max(estimates) * 1.4)
-
-    fig1.tight_layout()
-    fig1.savefig(FIGS_DIR / 'ddd_comparison.png', dpi=150, bbox_inches='tight')
-    print(f"Saved: {FIGS_DIR / 'ddd_comparison.png'}")
-
-    # Plot 2: Covariate Distribution
-    fig2, axes = plt.subplots(1, 2, figsize=(12, 5))
-
-    df_pre = df[df['post'] == 0]
-
-    # Left: Treated State
-    ax = axes[0]
-    groups_treat = df_pre[df_pre['state_treat'] == 1].groupby('is_female')['X'].mean()
-    ax.bar(['Men', 'Women'], [groups_treat[0], groups_treat[1]],
-           color=['steelblue', 'coral'], alpha=0.7, edgecolor='black')
-    ax.set_title('Treated State\n(Imbalanced)', fontsize=12)
-    ax.set_ylabel('Mean Education (X)', fontsize=11)
-    ax.set_ylim(0, 1)
-    for i, v in enumerate([groups_treat[0], groups_treat[1]]):
-        ax.text(i, v + 0.05, f'{v:.2f}', ha='center', fontweight='bold')
-
-    # Right: Control State
-    ax = axes[1]
-    groups_ctrl = df_pre[df_pre['state_treat'] == 0].groupby('is_female')['X'].mean()
-    ax.bar(['Men', 'Women'], [groups_ctrl[0], groups_ctrl[1]],
-           color=['steelblue', 'coral'], alpha=0.7, edgecolor='black')
-    ax.set_title('Control State\n(Balanced)', fontsize=12)
-    ax.set_ylabel('Mean Education (X)', fontsize=11)
-    ax.set_ylim(0, 1)
-    for i, v in enumerate([groups_ctrl[0], groups_ctrl[1]]):
-        ax.text(i, v + 0.05, f'{v:.2f}', ha='center', fontweight='bold')
-
-    fig2.suptitle('Covariate Imbalance: Women in Treated States Are More Educated',
-                  fontsize=14, y=1.02)
-    fig2.tight_layout()
-    fig2.savefig(FIGS_DIR / 'covariate_imbalance.png', dpi=150, bbox_inches='tight')
+    fig1.suptitle("Why Naive DDD Fails: Systematic Covariate Imbalance", fontsize=16, fontweight='bold')
+    plt.tight_layout()
+    plt.savefig(FIGS_DIR / 'covariate_imbalance.png', dpi=300)
     print(f"Saved: {FIGS_DIR / 'covariate_imbalance.png'}")
 
-    # Plot 3: DDD Decomposition Waterfall
-    fig3, ax3 = plt.subplots(figsize=(12, 6))
+    # --- Plot 2: Decomposition ---
+    fig2, ax2 = plt.subplots(figsize=(10, 6))
 
-    # Create waterfall-style chart
-    labels = ['Observed\n(Women, Treat)', 'CF Men, Treat\n(removes policy)',
-              'CF Women, Ctrl\n(gender trend)', 'CF Men, Ctrl\n(base trend)', 'DR-DDD']
-    values = [components['observed'], components['cf_men_treat'],
-              components['cf_women_ctrl'], components['cf_men_ctrl'], robust_att]
-    colors = ['coral', 'steelblue', 'coral', 'steelblue', 'green']
+    labels = ['KY High\n(Target)', 'KY Low', 'MI High', 'MI Low']
+    values = [components['ky_high'], components['ky_low'], components['mi_high'], components['mi_low']]
+    # Red for KY, Blue for MI
+    colors = [COLORS['treat'], '#ff9896', COLORS['control'], '#aec7e8']
 
-    ax3.bar(labels, values, color=colors, alpha=0.7, edgecolor='black', linewidth=2)
+    bars = ax2.bar(labels, values, color=colors, edgecolor='black', alpha=0.8)
+    ax2.axhline(0, color='black', linewidth=1)
 
-    for i, (label, v) in enumerate(zip(labels, values)):
-        ax3.text(i, v + 0.1, f'{v:.2f}', ha='center', fontweight='bold', fontsize=11)
+    # Add values
+    for bar, v in zip(bars, values):
+        height = bar.get_height()
+        offset = 0.005 if height > 0 else -0.015
+        ax2.text(bar.get_x() + bar.get_width()/2, height + offset, f"{v:.3f}",
+                 ha='center', fontweight='bold', color=COLORS['text'])
 
-    ax3.axhline(y=TRUE_ATT, color='green', linestyle='--', linewidth=2,
-                label=f'True ATT = {TRUE_ATT}')
-    ax3.set_ylabel('Value', fontsize=12)
-    ax3.set_title('DR-DDD Decomposition\n'
-                  'All counterfactuals evaluated at target group\'s covariate distribution',
-                  fontsize=14)
-    ax3.legend()
-    ax3.grid(True, alpha=0.3, axis='y')
+    ax2.set_title("Robust DDD Decomposition (Target-Adjusted Trends)", fontsize=16, fontweight='bold')
+    ax2.set_ylabel("Change in Log Duration (Post - Pre)", fontsize=12)
+    ax2.grid(True, alpha=0.3, axis='y', color=COLORS['grid'])
+    
+    # Clean spines
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
 
-    fig3.tight_layout()
-    fig3.savefig(FIGS_DIR / 'ddd_decomposition.png', dpi=150, bbox_inches='tight')
+    # Add DDD Calculation Annotation
+    note = (
+        f"Robust DDD = (KY High - KY Low) - (MI High - MI Low)\n"
+        f"= ({values[0]:.3f} - {values[1]:.3f}) - ({values[2]:.3f} - {values[3]:.3f})\n"
+        f"= {robust_est:.3f}"
+    )
+    ax2.text(0.02, 0.95, note, transform=ax2.transAxes, va='top',
+             bbox=dict(boxstyle="round", fc="white", ec="#e5e5e5"), fontsize=11)
+
+    plt.tight_layout()
+    plt.savefig(FIGS_DIR / 'ddd_decomposition.png', dpi=300)
     print(f"Saved: {FIGS_DIR / 'ddd_decomposition.png'}")
 
-    # =========================================================================
-    # Step 7: Summary
-    # =========================================================================
-    print("\n" + "=" * 70)
-    print("[7] Summary")
-    print("=" * 70)
+    # --- Plot 3: Bias Comparison ---
+    fig3, ax3 = plt.subplots(figsize=(8, 6))
+    
+    methods = ['Naive DDD\n(OLS)', 'Robust DDD\n(Outcome Reg.)']
+    estimates = [naive_est, robust_est]
+    colors = [COLORS['control'], COLORS['treat']] # Blue for Naive, Red for Robust (Target)
+    
+    bars = ax3.bar(methods, estimates, color=colors, edgecolor='black', alpha=0.8, width=0.5)
+    ax3.axhline(0, color='black', linewidth=1)
+    
+    # Add values
+    for bar, v in zip(bars, estimates):
+        height = bar.get_height()
+        offset = 0.005 if height > 0 else -0.015
+        ax3.text(bar.get_x() + bar.get_width()/2, height + offset, f"{v:.3f}",
+                 ha='center', fontweight='bold', color=COLORS['text'])
+                 
+    ax3.set_title('Bias Comparison: Naive vs. Robust DDD', fontsize=16, fontweight='bold')
+    ax3.set_ylabel('Estimated Effect', fontsize=12)
+    ax3.grid(True, alpha=0.3, axis='y', color=COLORS['grid'])
+    
+    # Clean spines
+    ax3.spines['top'].set_visible(False)
+    ax3.spines['right'].set_visible(False)
+    
+    # Annotation
+    diff = robust_est - naive_est
+    ax3.annotate(f'Difference due to\ncovariate adjustment:\n{diff:+.3f}', 
+                 xy=(0.5, (naive_est + robust_est)/2), xytext=(0.5, max(estimates) + 0.05),
+                 ha='center', arrowprops=dict(arrowstyle='-|>', color=COLORS['text']))
 
-    print(f"""
-RESULTS COMPARISON
-==================
-
-                        Estimate    SE      Bias
-                        --------    --      ----
-True Effect:            {TRUE_ATT:.4f}      -       -
-Naive DDD (3WFE):       {naive_ols:.4f}    {se_naive:.4f}   {naive_ols - TRUE_ATT:+.4f} ({(naive_ols - TRUE_ATT)/TRUE_ATT*100:+.1f}%)
-Robust DDD (DR):        {robust_att:.4f}    {se_robust:.4f}   {robust_att - TRUE_ATT:+.4f} ({(robust_att - TRUE_ATT)/TRUE_ATT*100:+.1f}%)
-
-KEY INSIGHTS
-============
-
-1. NAIVE DDD IS BIASED when covariate distributions differ between
-   target (women) and placebo (men) groups.
-
-2. THE BIAS ARISES because naive DDD uses the wrong covariate
-   distribution when computing counterfactuals.
-
-3. ROBUST DDD FIXES THIS by evaluating all counterfactual predictions
-   at the target group's covariate distribution.
-
-4. THE FORMULA requires 3 comparisons (not 2):
-   ATT = (Observed - CF_men_treat) - (CF_women_ctrl - CF_men_ctrl)
-
-WHEN TO USE ROBUST DDD
-======================
-
-Use Robust DDD when:
-  - Covariate distributions differ between target and placebo groups
-  - Trends depend on observable covariates
-  - You want protection against model misspecification
-
-Use Naive DDD when:
-  - Target and placebo groups are balanced on covariates
-  - Trends don't depend on covariates
-  - Quick/simple analysis is sufficient
-
-REFERENCE
-=========
-Ortiz-Villavicencio, A. & Sant'Anna, P. H. C. (2025)
-"Doubly Robust Difference-in-Difference-in-Differences Estimators"
-    """)
+    plt.tight_layout()
+    plt.savefig(FIGS_DIR / 'ddd_comparison.png', dpi=300)
+    print(f"Saved: {FIGS_DIR / 'ddd_comparison.png'}")
 
     plt.close('all')
     print("\n" + "=" * 70)

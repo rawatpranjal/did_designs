@@ -47,7 +47,7 @@ XX_module_name/
 | 03 | Staggered | mpdta | `load_mpdta()` |
 | 04 | Covariates/DR | LaLonde | `load_lalonde()` |
 | 05 | HTE/DDD | Medicaid | `load_medicaid()` |
-| 06 | Robust DDD | Simulated | Generated in module |
+| 06 | Robust DDD | Meyer et al. (1995) | `load_injury()` |
 | 07 | SDID | California Prop 99 | `load_smoking()` |
 
 Additional datasets: `load_castle()`, plus raw CSVs in `data/`.

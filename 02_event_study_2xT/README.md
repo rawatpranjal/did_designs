@@ -124,6 +124,21 @@ python main.py
 | Anticipation effects | Move reference period earlier |
 | Only 2 periods | Back to Module 01 |
 
+---
+
+## Appendix: Computation Results
+
+| Event Time | Manual ATT | Regression ATT | Notes |
+|:-----------|:-----------|:---------------|:------|
+| t = -2 (1986) | -0.81 | -0.81 | Pre-trend (close to 0) |
+| t = -1 (1987) | 0.00 | 0.00 | Reference (normalized) |
+| t = 0 (1988) | -3.64 | -3.64 | First post-treatment |
+| t = 1 (1989) | -7.18 | -7.18 | Effect grows |
+| t = 5 (1993) | -19.21 | -19.21 | |
+| t = 12 (2000) | -30.45 | -30.45 | Long-run effect |
+
+**Verdict:** Manual = Regression (exact match). Event study is just 2×2 in a loop.
+
 ## References
 
 - Baker, A., Callaway, B., Cunningham, S., Goodman-Bacon, A., & Sant'Anna, P. (2025). A Practitioner's Guide to Difference-in-Differences. [[PDF]](../papers/Baker_etal_2025_Practitioners_Guide_DiD.pdf)

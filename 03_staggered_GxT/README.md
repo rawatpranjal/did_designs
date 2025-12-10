@@ -132,6 +132,19 @@ TWFE coefficient $\hat{\delta}$ is a weighted average of:
 
 With heterogeneous effects, bad comparisons get **negative weights**, biasing $\hat{\delta}$ toward zero or even wrong sign.
 
+---
+
+## Appendix: Computation Results
+
+| Method | Estimate | Notes |
+|:-------|:---------|:------|
+| Manual ATT(2004,2004) | -0.0194 | Cohort 2004, event time 0 |
+| Manual ATT(2004,2005) | -0.0783 | Cohort 2004, event time 1 |
+| CS Simple ATT (aggregated) | -0.0568 | Average of post-treatment ATT(g,t) |
+| TWFE (demeaned) | -0.0365 | Biased toward zero |
+
+**Verdict:** TWFE (-0.0365) differs from CS (-0.0568). TWFE biased due to bad comparisons (already-treated as controls).
+
 ## References
 
 - Callaway, B., & Sant'Anna, P. H. (2021). Difference-in-differences with multiple time periods. *Journal of Econometrics*. [[PDF]](../papers/Callaway_SantAnna_2021_DiD_Multiple_Periods.pdf)

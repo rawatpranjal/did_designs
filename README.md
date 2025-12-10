@@ -5,6 +5,19 @@
 
 Implementations of modern DiD estimators following Baker, Callaway, Cunningham, Goodman-Bacon, and Sant'Anna (2025).
 
+## Notation
+
+| Symbol | Meaning |
+|:-------|:--------|
+| $Y_{it}$ | Outcome for unit $i$ at time $t$ |
+| $D_i$ | Treatment indicator (1 = treated) |
+| $G_i$ or $g$ | Treatment cohort (year first treated) |
+| $\bar{y}_{T,t}$, $\bar{y}_{C,t}$ | Sample means for Treated/Control at time $t$ |
+| $ATT$ | Average Treatment Effect on the Treated |
+| $\mu_i$, $\lambda_t$ | Unit and time fixed effects |
+| $\hat{p}(X)$ | Propensity score |
+| $\omega_i$, $\lambda_t$ | Unit weights, time weights (SDID) |
+
 ## Modules
 
 ### 01. Canonical 2x2
@@ -249,13 +262,13 @@ All estimates from running each module. Reported faithfully for objective compar
 
 ### Module 07: Synthetic DiD (Prop 99)
 
-| Method | Estimate | Notes |
+| Method | Estimate | Paper |
 |:-------|:---------|:------|
-| Naive DiD | -27.35 | Simple average of controls |
-| Synthetic Control | -15.43 | Unit weights only |
-| SDID | -15.01 | Unit + time weights |
+| Naive DiD | -27.35 | -27.3 |
+| Synthetic Control | -19.45 | -19.6 |
+| SDID | -15.60 | -15.6 |
 
-**Verdict:** SDID combines unit weights (like SC) with time weights for doubly robust estimation.
+Paper: Arkhangelsky et al. (2021) Table 1. SC via pysyncon, SDID via synthdid.
 
 ---
 

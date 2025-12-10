@@ -1,0 +1,5674 @@
+Better Understanding Triple Differences Estimators∗
+Marcelo Ortiz-Villavicencio †
+
+Pedro H. C. Sant’Anna‡
+
+arXiv:2505.09942v3 [econ.EM] 18 Jul 2025
+
+July 21, 2025
+
+Abstract
+Triple Differences (DDD) designs are widely used in empirical work to relax parallel trends
+assumptions in Difference-in-Differences (DiD) settings. This paper highlights that common
+DDD implementations—such as taking the difference between two DiDs or applying threeway fixed effects regressions—are generally invalid when identification requires conditioning
+on covariates. In staggered adoption settings, the common DiD practice of pooling all not-yettreated units as a comparison group can introduce additional bias, even when covariates are
+not required for identification. These insights challenge conventional empirical strategies and
+underscore the need for estimators tailored specifically to DDD structures. We develop regression adjustment, inverse probability weighting, and doubly robust estimators that remain
+valid under covariate-adjusted DDD parallel trends. For staggered designs, we demonstrate
+how to effectively utilize multiple comparison groups to obtain more informative inferences.
+Simulations and three empirical applications highlight bias reductions and precision gains
+relative to standard approaches. A companion R package is available.
+JEL: C10; C14; C21; C23.
+Keywords: Triple Differences; Difference-in-Differences; Difference-in-Difference-in-Differences;
+Parallel Trends; Doubly Robustness; Staggered Adoption.
+
+∗
+
+We thank participants from the 2023 SEA Conference, 2024 Midwest Econometrics Group Conference, 2025
+Georgia Econometrics Workshop, and participants of the “Difference-in-Differences” Workshops from Causal Solutions in 2022 and 2023. This paper builds on and supersedes the material used for the 2022 Causal Solutions
+YouTube Lecture available here. A companion R package, triplediff, is freely available to automate all the DDD
+estimators proposed in this article.
+†
+Department of Economics, Emory University. Email: marcelo.ortiz@emory.edu
+‡
+Department of Economics, Emory University. Email: pedro.santanna@emory.edu
+
+1
+
+1
+
+Introduction
+
+Over the last few years, we have seen a big Difference-in-Differences (DiD) “methodological revolution” with multiple DiD estimators being proposed to address the interpretability shortcomings
+associated with using simple two-way fixed-effects specifications in the presence of treatment effect
+heterogeneity.1 Although these modern DiD estimators can capture richer notions of heterogeneity,
+in practice, they rely on parallel trends (PT) assumptions, and a concern relates to how plausible
+these PT assumptions are. When such PT assumptions are not reasonable enough approximations
+of reality, one may doubt the conclusions of DiD studies (Rambachan and Roth, 2023; Chiu, Lan,
+Liu and Xu, 2025).
+In some setups, however, it is possible to naturally relax such DiD-type PT assumptions and
+retain the simplicity and empirical appeal of DiD-type analysis. This is particularly the case when
+a unit needs to fulfill two criteria to be treated, e.g., it belongs to (i) a group (e.g., a state) in
+which the treatment is enabled, and (ii) a partition of the population that qualifies (or is eligible)
+for treatment (e.g., women). Such setups are often referred to as Triple Differences (DDD), and
+allow for group-specific and partition-specific violations of parallel trends. Since its introduction
+by Gruber (1994), DDD has gained considerable popularity among empirical researchers. Some
+prominent recent DDD applications include Antwi, Moriya and Simon (2013), Walker (2013),
+Garthwaite, Gross and Notowidigdo (2014), Alsan and Wanamaker (2018), Patnaik (2019), Hansen
+and Wingender (2023), and Bailey, Helgerman and Stuart (2024)—see Olden and Møen (2022) for
+additional documentation of DDD applications, and Section 6 for three DDD applications. Despite
+its empirical popularity, little attention has been devoted to better understanding the econometric
+foundations of DDD setups with covariates, multiple periods, and/or staggered treatment adoption.
+This article aims to improve our understanding of Triple Difference (DDD) designs. Our main
+goal is to provide a set of clear, easy-to-use, and theoretically grounded tools that empirical
+researchers can utilize whenever they wish to explore DDD designs. To that end, we study identification, estimation, and inference procedures for DDD when covariates may be important for the
+reliability of the identification assumptions, multiple periods are available, and treatment adoption is potentially staggered over time. We tackle the DDD problem using causal inference first
+principles and uncover interesting results that challenge some conventional wisdom and common
+practices.
+For instance, although DDD estimators can be understood as the difference between two DiD
+estimators in setups with two periods and no covariates (Olden and Møen, 2022), our results
+highlight that this is no longer the case when covariates are required to justify the plausibility
+of a DDD-type parallel trends assumption. As we illustrate through simulations, proceeding as
+if DDD were just the difference between two DiD estimators can lead to severely biased results.
+1 See, e.g., Roth, Sant’Anna, Bilinski and Poe (2023) and Baker, Callaway, Cunningham, Goodman-Bacon and
+Sant’Anna (2025) for overviews.
+
+2
+
+Such bias arises because this naive DDD strategy fails to integrate the covariate distribution over
+the correct reference group—the treated group. We show that it is straightforward to avoid these
+problems and propose regression adjustment, inverse probability weighting, and doubly robust
+DDD estimators. We also show that if one wants to cast DDD in terms of DiD, one would need
+three—and not two—DiD terms. Each of these DiD terms compares effectively treated units with
+a different type of untreated units, e.g., units in a treated state but ineligible for treatment, units
+that are eligible but are in an untreated state, or ineligible units in an untreated state.
+In setups with staggered treatment adoption, our results once again challenge the interpretation
+of DDD as the difference between two DiDs. In DiD with staggered treatment adoptions, it is now
+common to pool all not-yet-treated units at a time period and use that aggregate set of units
+as a valid comparison group.2 Thus, one may think that a similar strategy should work with
+DDD. However, our results suggest that this is generally not the case and that pooling all notyet-treated units and proceeding as in staggered DiD procedures can lead to biased estimators
+for average treatment effect parameters, even when covariates do not play a significant role. This
+arises because the proportion of units eligible for treatment may change across groups that enable
+treatment over time. As DDD allows for group-specific and partition-specific violations of DiDtype PT, these differential trends do not average out when pooling all not-yet-treated units, leading
+to potentially misleading estimates. We propose DDD estimators that bypass this drawback by
+using any specific not-yet-treated unit as a comparison group (e.g., the set of units in groups
+that never enabled treatment). As one can potentially use different not-yet-treated cohorts as
+comparison groups, we also discuss combining these to form more precise estimators. Our proposed
+DDD estimator that aggregates across different comparison groups can be understood as a twostep Generalized Method of Moments (GMM) procedure based on recentered influence functions.
+Importantly, our staggered DDD procedures can flexibly accommodate covariates using regression
+adjustment, inverse probability weighting, or doubly robust methods and can also be used to form
+event-study estimators that highlight how average treatment effects evolve with elapsed treatment
+time.
+We illustrate our results through Monte Carlo simulations and three different empirical applications that address various DDD setups. Our Monte Carlo results highlight that ignoring the key
+takeaways in this paper and relying on overly rigid estimators can lead to biases and imprecise
+conclusions; our proposed DDD estimators bypass these limitations. In terms of empirical applications, we (a) revisit Cai (2016) and analyze the effects of agricultural insurance programs on
+financial decisions in China; (b) build on Cui, Zhang and Zheng (2018) and examine the impact of
+the emission trading scheme on carbon emissions in China; and (c) Hansen and Wingender (2023)
+and assess the impact of genetically modified crop adoption on countrywide yields. Compared
+to the three-way fixed effects estimators used by Cai (2016), our doubly robust DDD estimator
+2 See, e.g., Callaway and Sant’Anna (2021); De Chaisemartin and d’Haultfoeuille (2020); Wooldridge (2021);
+Borusyak, Jaravel and Spiess (2024).
+
+3
+
+yields substantial gains in precision, with their confidence intervals being up to 115% wider than
+ours. In our application examining the effect of the emission trading scheme on carbon emissions
+with staggered adoption, our doubly robust DDD estimators yield a more modest and statistically
+insignificant effect. In contrast, the three-way fixed estimators indicate a statistically significant
+effect on the share of low-carbon patents. When we apply our staggered DDD tools to Hansen and
+Wingender (2023)’s data, we find that their conclusions are robust to dropping observations that
+are part of the never-enabling crop-country group, which is not the case when using more standard
+three-way fixed effects estimators. Taken together, these results highlight that our proposed tools
+can indeed lead to interesting new insights that are of practical interest.
+Related literature: This article contributes to the rapidly expanding literature on DiDrelated methods. In particular, we contribute to the scarce literature on DDD procedures. Our
+paper is related to Olden and Møen (2022), though we cover substantially more general DDD
+setups with (a) multiple periods, (b) staggered treatment adoption, and (c) covariates potentially
+playing an important role for the plausibility of the identification assumptions. In this sense,
+our paper can be understood as the DDD analog of Callaway and Sant’Anna (2021). However,
+and in sharp contrast with Callaway and Sant’Anna (2021), our DDD procedures cannot pool all
+not-yet-treated units as an aggregated comparison group, highlighting some interesting differences
+between staggered DiD and DDD designs. Our paper is also related to Strezhnev (2023), who
+introduced a decomposition of the DDD estimators based on three-way fixed effects specifications,
+illustrating when and why it fails to recover an easily interpretable causal parameter of interest
+when treatment effects are heterogeneous. To some extent, Strezhnev (2023) can be understood as
+the analog of Goodman-Bacon (2021) to DDD setups. As such, our results complement Strezhnev
+(2023), and since our estimators do not rely on a rigid three-way fixed effect specification, they
+circumvent the issues highlighted in his paper. Our paper is also related to Sloczyński (2022, 2024)
+in the sense that our proposed tools avoid issues related to potentially misleading weights related
+to model misspecifications.
+In this paper, we use the term “triple differences” to describe designs under which units must
+satisfy two criteria to be (effectively) treated. However, we note that sometimes different researchers use the term triple differences more broadly, for instance, when they are interested in
+analyzing treatment effect heterogeneity across subgroups. In such cases, it is important to note
+that the underlying identification assumptions and the parameters of interest would differ from
+those studied in this paper; see Caron (2025) for a recent example. Those procedures should be
+understood as a complement to the ones we discuss in this paper, as they can be used to answer
+different questions of interest.
+Organization of the paper: The rest of the paper is organized as follows. In the next
+section, we present our framework. In Section 3, we challenge some standard empirical practices
+for DDD analyses in terms of interpreting them as a simple extension of DiD analysis, and we also
+highlight some important practical takeaway messages from our main results. Section 4 introduces
+4
+
+our formal identification, estimation, and inference results. Section 5 presents a Monte Carlo
+study to demonstrate the finite sample properties of our estimator, while Section 6 presents three
+empirical illustrations. Section 7 concludes. Detailed mathematical proofs and additional results
+can be found in the Supplemental Appendix. To ease the adoption of our proposed DDD tools,
+we provide an open-source R package, triplediff, which automates all the procedures described
+in this article.
+
+2
+
+Framework
+
+We start our analysis by discussing the specifics of our DDD research design, including potential
+outcomes, parameters of interest, and identification assumptions. We consider a setup with T time
+periods, t “ 1, 2, . . . , T . Units are indexed by i, with i “ 1, 2, . . . , n. We focus on setups where n
+is much larger than T , as our inference procedures are asymptotically justified using the “fixed-T ,
+large-n” panel data framework.
+Each unit may be exposed to a binary treatment in any time period t ą 1. Treatment is an
+absorbing state such that once a unit is treated, it remains treated for the remainder of the panel.
+Each unit i belongs to a group (e.g., a state or a country) that enables treatment for the first
+time in period g ą 1. Let Si P S Ď t2, ..., T u Y t8u be a variable that indicates the first time the
+policy/treatment was enabled, with the notion that S “ 8 if the policy is not enabled by t “ T . In
+addition, each unit belongs to a population partition that qualifies (or is eligible) for the treatment
+or not (e.g., being a woman, or an indicator for specific crops). We denote this variable by Qi with
+Qi “ 1 if unit i (eventually) qualifies for the treatment and Qi “ 0 otherwise. For simplicity, we
+assume that this population partition that eventually qualifies for treatment is time-invariant.
+In our DDD setup, a unit i is treated in period t if t ě Si and Qi “ 1, i.e., if it belongs to a
+group that has already enabled treatment by period t (i.e., t ě Si ) and it qualifies for treatment
+(i.e., Qi “ 1). With this notation that makes it clear that a unit i is treated if it satisfies two
+criteria, let Di,t “ 1tt ě Si , Qi “ 1u be an indicator for whether unit i receives treatment in period
+t, and let Gi “ mintt : Di,t “ 1u be the earliest period at which unit i has received treatment.
+If i is never treated during the sample, then Gi “ 8. Here, we have that Gi “ Si if Qi “ 1 and
+Gi “ 8 if Qi “ 0.3 Let G denote the support of Gi and Gtrt “ Gzt8u. We assume that a group of
+“never-enabled” units always exists, i.e., Si “ 8 for some units. In an application where all units
+belong to a group that eventually enables treatment, we remove all that data from all units from
+the time the last cohort enabled treatment onwards, i.e., we drop all observations from periods
+t ą max Si , and retain the remaining data as the “effective” data to be used in our analysis, where
+the last-to-be-eligible group becomes the “never-eligible” group.4 Finally, we also assume that a
+3 Note that when all units are eligible for treatment, we have Gi “ Si , getting us back to a (staggered) DiD setup;
+see, e.g., Callaway and Sant’Anna (2021) and Sun and Abraham (2021).
+4 If needed, we also update the notion of support of all variables to reflect this change. In particular, T here denotes
+
+5
+
+vector of pre-treatment covariates Xi , whose support is denoted by X Ď Rd is available.
+Regarding potential outcomes, we adopt the potential outcome framework of Robins (1986)
+with potential outcomes indexed by treatment sequences. Let 0s and 1s be s-dimensional vectors
+of zeros and ones, respectively, and denote the potential outcome for unit i at time t if unit i is
+first treated at time g by Yi,t p0g´1 , 1T ´g`1 q, and denote by Yi,t p0T q the outcome if untreated by
+time t “ T . As we focus our attention on staggered treatment adoptions, we can simplify notation
+and index potential outcomes by the time treatment begins, g: Yi,t pgq “ Yi,t p0g´1 , 1T ´g`1 q and use
+Yi,t p8q “ Yi,t p0T q to denote never-treated potential outcomes. In practice, though, we observe,
+ÿ
+Yi,t “
+1tGi “ guYi,t pgq,
+(2.1)
+gPG
+
+where 1tAu represents the indicator function, which equals one if A is true and zero otherwise.
+Additionally, we assume the observation of a random sample of pYt“1 , . . . , Yt“T , X 1 , G, S, Qq1 .
+Assumption S (Random Sampling). tpYi,t“1 , . . . , Yi,t“T , Xi1 , Gi , Si , Qi q1 uni“1 is a random sample
+from pYt“1 , . . . , Yt“T , X 1 , G, S, Qq1 .
+
+2.1
+
+Parameters of interest
+
+In this paper, we aim to gain a deeper understanding of how average treatment effects vary across
+periods and different groups defined by the treatment starting period. More specifically, we want
+to make inferences on functionals of the group-time average treatment effects, AT T pg, tq’s, defined
+as
+AT T pg, tq ” ErYi,t pgq ´ Yi,t p8q|Gi “ gs “ ErYi,t pgq ´ Yi,t p8q|Si “ g, Qi “ 1s,
+
+(2.2)
+
+By exploring that in our context Gi “ g if and only if Si “ g and Qi “ 1, we have that AT T pg, tq “
+ErYi,t pgq ´ Yi,t p8q|Si “ g, Qi “ 1s. Note that AT T pg, tq captures how the average treatment effects
+evolve over time for each treatment group g (Callaway and Sant’Anna, 2021). As such, one can use
+AT T pg, tq to construct group-g-specific event studies by analyzing how average treatment effects
+vary with elapsed treatment time e “ t ´ g.
+In some setups with multiple groups g, researchers may want to summarize over the many
+AT T pg, tq’s into a more aggregate parameter. A natural summary parameter that still allows one
+to understand treatment effect dynamics with respect to elapsed treatment time is the aggregated
+event study parameter ESpeq, defined as
+ÿ
+ˇ
+“
+‰
+ESpeq ” E AT T pG, G ` eq ˇG ` e P r2, T s “
+PpG “ g|G ` e P r2, T sqAT T pg, g ` eq. (2.3)
+gPGtrt
+
+One may also want to aggregate the event study coefficients further to recover a scalar summary
+measure. Let E denote the support of post-treatment event time E “ t ´ G, t ě G, and let NE
+the number of available periods in the subset of the data that we will use in our analysis.
+
+6
+
+denote its cardinality. Then,
+ESavg ”
+
+1 ÿ
+ESpeq,
+NE ePE
+
+(2.4)
+
+provides a simple average of all post-treatment event study coefficients. Many other summary
+parameters are possible; see Callaway and Sant’Anna (2021) for discussions of several alternatives.
+
+2.2
+
+Identification assumptions
+
+To identify the AT T pg, tq’s and their functionals ESpeq and ESavg , we impose the following assumptions.
+Assumption SO (Strong Overlap). For every pg, qq P S ˆ t0, 1u and for some ϵ ą 0, PrS “ g, Q “
+q|Xs ą ϵ with probability one.
+Assumption SO is an overlap condition that ensures that for any value of X, there are units with
+any combination pg, qq P S that have comparable X values. Heuristically, this condition guarantees
+that we cannot perfectly predict which pg, qq-partition a unit belongs to using information from
+X. This assumption also rules out irregular identification (Khan and Tamer, 2010).5
+We also impose the following no-anticipation assumptions.
+Assumption NA (No-Anticipation). For every g P Gtrt , and every pre-treatment period t ă g,
+ErYi,t pgq|S “ g, Q “ 1, Xs “ ErYi,t p8q|S “ g, Q “ 1, Xs with probability one.
+Assumption NA rules out anticipatory effects among treated units as in, e.g., Abbring and
+van den Berg (2003), Callaway and Sant’Anna (2021), and Sun and Abraham (2021). This assumption is important as it allows us to consider observations in pre-treatment periods t ă g as
+effectively untreated. If units are expected to anticipate some treatments—for example, if treatment is announced in advance—it is important to adjust the definition of the treatment date to
+account for this; see Malani and Reif (2015) for a discussion.
+Next, we impose our final identification assumption that restricts the evolution of average
+untreated potential outcomes across groups.
+Assumption DDD-CPT (DDD-Conditional Parallel Trends). For each g P Gtrt , g 1 P S and time
+periods t such that t ě g and g 1 ą maxtg, tu, with probability one,
+E rYt p8q ´ Yt´1 p8q|S “ g, Q “ 1, Xs ´ E rYt p8q ´ Yt´1 p8q|S “ g, Q “ 0, Xs
+“
+1
+E rYt p8q ´ Yt´1 p8q|S “ g , Q “ 1, Xs ´ E rYt p8q ´ Yt´1 p8q|S “ g 1 , Q “ 0, Xs .
+5 As our focus is on AT T pg, tq-type parameters, it is possible to relax Assumption SO to hold only over X in the
+support of the covariates among the (eventually) treated units. To simplify the discussion, we abstract from these
+subtle points.
+
+7
+
+Assumption DDD-CPT is a conditional parallel trends assumption for DDD setups that generalizes the unconditional DDD parallel trend assumption for the two-period setup of Olden and
+Møen (2022) to setups with multiple periods, staggered treatment adoption, and when assumptions are only plausible after conditioning on X. Assumption DDD-CPT can also be understood
+as an extension of the conditional PT assumption based on not-yet-treated units from the DiD
+setup of Callaway and Sant’Anna (2021) to our DDD setup— i.e., we can use any unit from groups
+that either never enabled treatment or those that will eventually enable treatment. Moreover, if
+covariates do not play any important identification role in the analysis, one can take X “ 1 for all
+units, so Assumption DDD-CPT would hold unconditionally.
+Several remarks about Assumption DDD-CPT are worth making. First, if all units in a group
+S are eligible for treatment, Assumption DDD-CPT reduces to Assumption 5 of Callaway and
+Sant’Anna (2021) under the no-anticipation condition in Assumption NA. However, this case is
+not appealing to us, as that would not qualify as a DDD design. Second, as Assumption DDDCPT only holds after conditioning on covariates, it does not restrict the evolution of untreated
+potential outcomes across covariate-strata, i.e., it allows for covariate-specific trends, which can
+be very important in applications. Third, and perhaps the most empirically relevant, Assumption DDD-CPT does not impose DiD-type parallel trends among units with S “ g—i.e., it does
+not impose that E rYt p8q ´ Yt´1 p8q|S “ g, Q “ 1, Xs “ E rYt p8q ´ Yt´1 p8q|S “ g, Q “ 0, Xs—
+nor impose DiD-type parallel trends across treated groups—i.e., it does not impose that
+E rYt p8q ´ Yt´1 p8q|S “ g, Q “ 1, Xs “ E rYt p8q ´ Yt´1 p8q|S “ g 1 , Q “ 1, Xs. As such, Assumption DDD-CPT allows for violations of traditional DiD-based PT, as provided that these violations
+are stable across groups. This observation is arguably what makes DDD appealing in settings where
+it can be applied.
+
+3
+
+Implications for Empirical Practices
+
+Before presenting our formal results on identification, estimation, and inference for average treatment effects in DDD designs, we challenge some standard empirical practices for DDD analyses
+and highlight some important practical takeaways from our paper.
+We first start with a simple setup involving only two periods, t “ 1 and t “ 2, and two eligibility
+groups, Si “ 2 (who enabled treatment in period 2) and Si “ 8 (who have not enabled treatment
+by period two). As before, units are either eligible (Qi “ 1) or ineligible (Qi “ 0) for the treatment,
+and we let Di,t be a treatment indicator for unit i in time period t, i.e., Di,t “ 1tt ě Si , Qi “ 1u.
+Since there are only two eligibility groups and two time periods, the relevant group-time ATT
+in such a scenario is AT T p2, 2q. As discussed in Olden and Møen (2022), when covariates are
+not important for the analysis, one can use ordinary least squares (OLS) based on the following
+
+8
+
+three-way fixed effects linear regression specification to recover the AT T p2, 2q:
+Yi,t “γi ` γs,t ` γq,t ` β3wfe Di,t ` εi,t ,
+
+(3.1)
+
+where γi are unit fixed effects, γs,t and γq,t are enabled-group-by-time and qualified-group-bytime fixed effects, and β3wfe is the parameter of interest. Indeed, in this particular setup, under
+Assumptions S, SO, NA, and DDD-CPT with X “ 1 a.s., it is straightforward to show that
+«ˆ
+˙ ˆ
+˙ ff
+β3wfe “
+E rY2 ´ Y1 |S “ 2, Q “ 1s ´ E rY2 ´ Y1 |S “ 2, Q “ 0s
+looooooooooooooooooooooooooooooooooooooomooooooooooooooooooooooooooooooooooooooon
+DiD estimand among S“2
+
+«ˆ
+´
+
+˙
+
+ˆ
+
+˙ ff
+
+E rY2 ´ Y1 |S “ 8, Q “ 1s ´ E rY2 ´ Y1 |S “ 8, Q “ 0s
+loooooooooooooooooooooooooooooooooooooooomoooooooooooooooooooooooooooooooooooooooon
+
+(3.2)
+
+DiD estimand among S“8
+
+“ AT T p2, 2q.
+The observation that β3wfe “ AT T p2, 2q in this simple setup has two implications: (i) one
+can use a simple three-way fixed effects (3WFE) regression specification and use OLS to estimate
+AT T p2, 2q in the DDD design, and (ii) DDD estimates can be understood as the difference between
+two DiD estimates (Olden and Møen, 2022). Based on these, one may be tempted to extrapolate
+these claims to more general setups. In what follows, we highlight that, unfortunately, this is
+not warranted and that proceeding in this manner can lead to non-negligible biases. The solution
+to these issues is relatively simple and involves adopting a “forward-engineering” approach to
+DDD setups (Baker et al., 2025), recognizing its specific characteristics. See also Mogstad and
+Torgovitsky (2024) for a related discussion in an instrumental variable context.
+
+3.1
+
+DDD setup with two periods, with covariates being important
+
+In this section, we illustrate the challenges of leveraging simple regression-based and DiD tools to
+DDD setups using simple simulations in a setup where covariates are important for identification,
+i.e., when Assumption DDD-CPT is satisfied only after accounting for covariates. We consider a
+design with four different time-invariant, unit-specific covariates, Xi “ pXi,1 , Xi,2 , Xi,3 , Xi,4 q1 , and
+two periods and two treatment-enabling groups. The true AT T p2, 2q in our simulations is zero.
+To ease the exposition, we abstract from further details about the DGP and refer the reader to
+Section 5.1 and Supplemental Appendix B.1 for a more detailed discussion.
+Based on the discussion on DDD without covariates above, it is natural to consider three alternative ways to incorporate covariates in the analysis. The first approach would be to “extrapolate”
+from (3.1), add the interactions of the time-invariant covariates with post-treatment dummies,
+Yi,t “γi ` γs,t ` γq,t ` β̃3wfe Di,t ` pXi 1tt“2u q1 θ ` ui,t ,
+
+9
+
+(3.3)
+
+and interpret the OLS estimates of β̃3wfe as estimates of AT T p2, 2q. The second natural way to
+proceed is similar, but it would leverage the Mundlak device and replace unit fixed effects in (3.1)
+with S-by-Q fixed effects, add covariates linearly,
+Yi,t “γs,q ` γs,t ` γq,t ` β̌3wfe Di,t ` Xi1 θ ` ei,t ,
+
+(3.4)
+
+and interpret the OLS estimates of β̌3wfe as estimates of AT T p2, 2q. Both strategies leverage a presumption that it is sufficient to add covariates linearly into the 3WFE regression specification (3.1)
+to allow for covariate-specific trends. A third strategy, which is also a priori intuitive, presumes
+that we can write DDD estimates as the difference between two DiD estimates: one DiD using
+the subset with S “ 2 and considering units treated if Q “ 1, and another DiD using the subset
+with S “ 8 and considering units treated if Q “ 1. Here, one could consider different estimation
+strategies. We focus on the doubly robust (DR) DiD estimators proposed by Sant’Anna and Zhao
+(2020), as a DR estimator is generally more resilient to model misspecifications.
+Figure 1: Density of different DDD estimates for ATT(2,2): two-period setup with covariates
+0.6
+Density
+
+Density
+
+0.15
+0.10
+
+0.4
+
+0.2
+
+0.05
+0.00
+
+0.0
+−15
+
+−10
+−5
+Three−Way Fixed Effect Estimator
+
+0
+
+−15
+
+(a) 3WFE with covariates interacted with post
+
+−10
+−5
+0
+Mundlak−Based Three−Way Fixed Effect Estimator
+
+(b) Mundlak-based 3WFE with covariates
+5
+
+0.4
+
+4
+Density
+
+Density
+
+0.3
+0.2
+0.1
+
+3
+2
+1
+
+0.0
+
+0
+−15
+
+−10
+−5
+Difference between two DiDs
+
+0
+
+−15
+
+−10
+
+−5
+
+0
+
+DR DDD
+
+(c) Difference between two Doubly Robust DiDs
+
+(d) Doubly Robust DDD
+
+Notes: Simulation designs based on DGP 1 described in Section 5.1 and Supplemental Appendix B.1, with n “ 5, 000 and 1, 000 Monte
+Carlo repetitions. True AT T p2, 2q is zero and is indicated in the solid vertical line in all panels. Panel (a) displays the density of OLS
+estimates of β̃3wfe based on (3.3). Panel (b) displays the density of OLS estimates of β̌3wfe based on (3.4). Panel (c) displays the
+density of the DDD estimates based on the difference between two doubly robust DiD estimators (Sant’Anna and Zhao, 2020). Panel
+(d) displays the density of the estimates based on our proposed doubly robust DDD estimator described in (3.5). All densities are
+computed across all simulation draws. Panels have the same x-axis range but different y-axis.
+
+To check if such alternative strategies recover the AT T p2, 2q, we draw 5, 000 units in each
+simulation draw, compute estimates using these three alternative estimators, and repeat this 1, 000
+times—we defer all details of the data generating process to Section 5.1 and Supplemental Appendix
+B.1. Panels (a) and (b) from Figure 1 display the density of OLS estimates for the Di,t coefficient
+in the regression specifications (3.3) and (3.4), while Panel (c) displays the density of the DDD
+10
+
+estimates based on the difference between two Sant’Anna and Zhao (2020) DR DiD estimators.
+These three panels make it clear that when covariates are necessary to justify the plausibility
+of the DDD research design, using any of these three procedures can lead to substantial biases
+and harm policy recommendations and evaluations. In other words, these results highlight that
+traditional 3WFE linear regression specifications are “too rigid” to be reliable for DDD analysis.
+They also highlight that, in general, one should not claim that DDD is the difference between two
+DiD procedures.
+A natural question that then arises is: What should we do instead? As we discuss in Section
+4, one can form regression adjustment, inverse probability weighting, and doubly robust DDD
+estimators that do not suffer from the shortcomings highlighted in Panels (a) - (c) in Figure 1.
+Among these, we generally favor the DR DDD estimator as it is more resilient against model misspecifications than the other alternatives. To form the DR DDD estimator for AT T p2, 2q, we need
+to estimates for the outcome regression models mYS“g,Q“q
+pXq ” E rY2 ´ Y1 |S “ g, Q “ q, Xs, and
+2 ´Y1
+S“g,Q“q
+p S“g,Q“q
+for the generalized propensity score model p
+pXq ” PrS “ g, Q “ q|Xs. Let m
+pXq
+Y1 ´Y0
+S“g,Q“q
+and pp
+pXq be working models for these—e.g, a linear regression model and a multinomial
+logistic linear model, though much richer, potentially machine-learning based estimators can also
+be used (Ahrens, Chernozhukov, Hansen, Kozbur, Schaffer and Wiemann, 2025). Based on these
+estimates, we propose the following DR DDD estimator for the AT T p2, 2q:
+”´
+¯´
+¯ı
+S“2,Q“1
+S“2,Q“0
+w
+ptrt
+pcomp
+p YS“2,Q“0
+pS, Qq ´ w
+pS, Q, Xq Y2 ´ Y1 ´ m
+pXq
+2 ´Y1
+¯´
+¯ı
+”´
+S“2,Q“1
+S“8,Q“1
+ptrt
+pS, Qq ´ w
+pcomp
+pS, Q, Xq Y2 ´ Y1 ´ m
+p S“8,Q“1
+pXq
+` En w
+Y2 ´Y1
+”´
+¯´
+¯ı
+S“2,Q“1
+S“8,Q“0
+ptrt
+pcomp
+p S“8,Q“0
+´ En w
+pS, Qq ´ w
+pS, Q, Xq Y2 ´ Y1 ´ m
+pXq
+,
+Y2 ´Y1
+
+z
+AT
+T dr p2, 2q “ En
+
+where En rAs “ n´1
+
+S“2,Q“1
+w
+ptrt
+pS, Qq ”
+
+(3.5)
+
+řn
+
+p are given by
+i“1 Ai denotes the sample mean, and the estimated weights w
+
+1tS “ 2, Q “ 1u
+,
+En r1tS “ 2, Q “ 1us
+
+1tS “ g, Q “ qu ¨ ppS“2,Q“1 pXq
+ppS“g,Q“q pXq
+S“g,Q“q
+w
+pcomp
+pS, Q, Xq ”
+ȷ.
+„
+1tS “ g, Q “ qu ¨ ppS“2,Q“1 pXq
+En
+ppS“g,Q“q pXq
+
+Interestingly, it is worth mentioning that although the DR DDD estimator in (3.5) cannot be
+expressed as the difference between two DR DiD estimators, it is a function of three DR DiD
+estimators, each one using a particular subset of the untreated units as a comparison group.
+For comparisons, we report in Panel (d) of Figure 1 the density of the estimates using the DR
+DDD estimates based on (3.5). Our proposed DR DDD estimator not only mitigates the biases
+associated with other estimation strategies but also yields substantially more precise estimates.
+All in all, the results in Figure 1 highlight that common DDD practices can lead to misleading
+conclusions. However, it is straightforward to bypass these limitations by adopting our DR DDD
+estimators.
+
+11
+
+3.2
+
+DDD setups with variation in treatment timing
+
+The practical challenges of estimating average treatment effects in DDD setups are not confined to
+the presence of covariates. Even in designs without covariates, the use of too-rigid 3WFE regression specifications like (3.1) can lead to misleading estimates when there is variation in treatment
+timing across groups (Strezhnev, 2023). In such cases, new identification and estimation concerns
+emerge that the recent DiD literature does not address. In particular, in this section, we highlight
+that, unlike in staggered DiD procedures like Callaway and Sant’Anna (2021), Borusyak et al.
+(2024), and Wooldridge (2021)6 , pooling all not-yet-treated units and using them as a comparison
+group does not respect the triple-differences identification assumptions and, as such, can lead to
+biased estimates for the parameters of interest. We also discuss straightforward and computationally simple estimators that bypass these problems. Throughout this section, we assume that all
+identification assumptions discussed in Section 2.2 hold without covariates, i.e., by taking X “ 1
+almost surely. Our methods naturally extend to setups where covariates are necessary for identification, as discussed in Section 4. There, we also explore extensions to event-study aggregations
+and treatment effect heterogeneity across groups and time.
+To build intuition, we begin by noting that the way the DiD literature has addressed the
+shortcomings of using regression specifications akin to (3.1) to infer overall average treatment
+effects is to decompose the problem into a series of 2-period 2-group (2 ˆ 2) DiDs; for an overview,
+see Roth et al. (2023) and Baker et al. (2025). A popular strategy involves using the units not yet
+treated by period t as a comparison group when estimating AT T pg, tq (Callaway and Sant’Anna,
+2021, Borusyak et al., 2024, Wooldridge, 2021). It is thus intuitive and natural to build on these
+DiD papers, Olden and Møen (2022)’s DDD procedure, and the linear regression specification
+(3.2), and attempt to estimate AT T pg, tq in a DDD setup using
+«ˆ
+˙ ˆ
+˙ff
+z
+AT
+T cs-nyt pg, tq “
+En rYt ´ Yg´1 |S “ g, Q “ 1s ´ En rYt ´ Yg´1 |S “ g, Q “ 0s
+«ˆ
+˙ ˆ
+˙ff
+´
+En rYt ´ Yg´1 |S ą t, Q “ 1s ´ En rYt ´ Yg´1 |S ą t, Q “ 0s
+
+(3.6)
+
+in any post-treatment periods t ě g.7 The question now is whether (3.6) indeed recovers
+AT T pg, tq’s under our identification assumptions.
+To answer this practically relevant question, we conduct some Monte Carlo simulations for a
+setup with three time periods, t “ 1, 2, 3, three treatment-enabling groups, S P t2, 3, 8u, and two
+eligibility groups Q “ 1 and Q “ 0. We focus on AT T p2, 2q, i.e., the average treatment effect in
+period two of being treated in period two, among units treated in period two. The true AT T p2, 2q
+6 See also De Chaisemartin and d’Haultfoeuille (2020, 2024) for related procedures that also pool not-yet-treated
+units. Their estimators allow for treatment turning on and off. However, they impose additional assumptions
+that restrict how past treatments affect future outcomes. We do not consider these setups in this paper.
+7 Since there are no covariates, we do not need to use three DiDs as we discussed in Section 3.1. We use the
+notation cs in (3.6) to denote the estimator discussed above, which pinpoints the baseline period at period g ´ 1.
+
+12
+
+in our simulations is 10. We considered a setup with n “ 5, 000 and conducted 1, 000 simulation
+draws. To ease the exposition, we abstract from further details about the DGP and refer the
+reader to Section 5.2 and Supplemental Appendix B.2 for a more detailed discussion.
+Panel (a) from Figure 2 displays the density of the DDD estimates for AT T p2, 2q based on
+the estimator in (3.6). This result makes it clear that, in general, (3.6) is not a valid estimator
+for the AT T p2, 2q in DDD setups, as it is systematically biased. In fact, in our simulations, (3.6)
+always leads to a negative estimate while the true effect is positive. This bias arises because the
+DDD parallel trends assumption is more flexible than its DiD counterpart: it allows for treatmentenabling-groups- and partition-specific violations of DiD-type parallel trends. In particular, when
+the fraction of eligible units differs across treatment-enabling groups S, pooling not-yet-treated
+units may conflate trends across heterogeneous populations, violating the assumptions necessary
+to interpret differences as causal.
+Figure 2: Density of different staggered DDD estimates for ATT(2,2), without covariates
+4
+
+0.3
+
+Density
+
+Density
+
+3
+0.2
+
+0.1
+
+2
+1
+
+0.0
+
+0
+−10
+
+−5
+0
+5
+DDD with pooled not−yet−treated units
+
+10
+
+−10
+
+(a) DDD using pooled not-yet-treated units
+
+−5
+
+0
+5
+DDD GMM with not−yet−treated units
+
+10
+
+(b) DDD GMM using all not-yet-treated units
+
+3
+
+Density
+
+Density
+
+4
+2
+
+3
+2
+1
+
+1
+
+0
+9.75
+
+0
+−10
+
+−5
+
+0
+5
+DDD with never−treated units
+
+(c) DDD using never-treated units
+
+10
+
+10.00
+
+DDD GMM with not−yet−treated units
+
+10.25
+
+10.50
+
+DDD with never−treated units
+
+(d) DDD using never-treated and GMM with notyet-treated units
+
+Notes: Simulation designs based on the design described in Section 5.2 and Supplemental Appendix B.2, with n “ 5, 000 and 1, 000
+Monte Carlo repetitions. The true AT T p2, 2q is ten and is indicated in the solid vertical line in all panels. Panel (a) displays the density
+of DDD estimates that use the pooled not-yet-treated units as a comparison group as described in (3.6). Panel (b) displays the density of
+the estimates based on our proposed DDD GMM estimator that uses all not-yet-treated units as a comparison group described in (3.8).
+Panel (c) displays the density of the estimates based on our proposed DDD estimator that uses the never-treated units as a comparison
+group described in (3.7) with gc “ 8. Panel (d) compares DDD estimates using never-treated units (yellow curve) with GMM-based
+DDD using not-yet-treated (green curve), on the same scale. All densities are computed across all simulation draws. Panels(a)-(c) have
+the same x-axis range but different y-axis.
+
+The key insight to address these problems is that we should be cautious when selecting the
+comparison group to estimate each AT T pg, tq. Such comparison groups must satisfy the DDD
+identification assumptions, which need to be verified on a group-by-group basis. Upon close inspection of Assumption DDD-CPT, a natural solution is to avoid pooling across treatment-enabling
+groups and use one of them at a time. Doing so yields multiple valid comparisons for the same
+13
+
+pg, tq group, generating an over-identified model. More precisely, for each available not-yet-enabled
+group gc ą t, we can use the following estimator for AT T pg, tq, t ě g:
+«ˆ
+˙ ˆ
+˙ff
+z
+En rYt ´ Yg´1 |S “ g, Q “ 1s ´ En rYt ´ Yg´1 |S “ g, Q “ 0s
+AT
+T gc pg, tq “
+«ˆ
+˙ ˆ
+˙ff
+´
+En rYt ´ Yg´1 |S “ gc , Q “ 1s ´ En rYt ´ Yg´1 |S “ gc , Q “ 0s
+.
+
+(3.7)
+
+Note that when gc “ 8, (3.7) uses the set of units that never enabled treatment S “ 8 as the
+comparison group. However, one is not restricted to this unique comparison group. In the context
+of our simulation, one can also use the units that enabled treatment in period three to learn
+about AT T p2, 2q. In this sense, instead of choosing which comparison group to use, we propose
+combining all available options and forming a more precise DDD estimator for the AT T pg, tqs.
+More concretely, we propose using
+p ´1
+11 Ω
+z
+z
+AT T gmm pg, tq “
+AT
+T dr pg, tq,
+p ´1
+11 Ω
+1
+g,t
+
+(3.8)
+
+z
+where AT
+T dr pg, tq is the kg,t ˆ 1-dimensional vector of all possible (non-collinear) estimators for
+p g,t is a consistent estimator of their varianceAT T pg, tq that uses a valid comparison group gc ą t, Ω
+z
+covariance matrix, and 1 is a (kg,t ˆ 1-dimensional) vector of ones. We show that AT
+T gmm pg, tq
+has a GMM interpretation based on re-centered influence functions in Remark 4.6.
+Panels (b) and (c) of Figure 2 display the density of the DDD estimates for AT T p2, 2q based on
+our GMM-based DDD estimator (3.7) and our DDD estimator that only uses the never-treated as
+comparison group gc “ 8 in (3.7), respectively. As it is easy to see, both estimators are correctly
+centered at the true AT T p2, 2q. As Panels (a) - (c) in Figure 2 have the same scale, it is challenging
+to compare our DDD estimates that combine all not-yet-treated units with our DDD estimates
+that use never-treated units as comparison groups. In Figure 2(d), we address this issue and
+display their densities based on the 1, 000 simulation draws. Overall, it is evident that utilizing
+all not-yet-treated units can yield substantial gains in precision. The results of our simulations
+z
+indicate that confidence intervals based on AT
+T gc “8 pg, tq are around 50% wider than those based
+z
+on AT
+T gmm pg, tq, underscoring the appeal of using our GMM-based DDD estimator in terms of
+power.
+Overall, the results in this section underscore the broader lesson that DDD designs with staggered adoption should not be treated as simple extensions of DiD methods. The interaction between
+timing, eligibility, and heterogeneity in group composition introduces complexities that necessitate more careful attention to the identification argument and the construction of the comparison
+group.
+
+14
+
+4
+
+The econometrics of DDD designs
+
+In this section, we discuss the econometrics of DDD designs following the framework discussed
+in Section 2. We start by establishing nonparametric identification of the AT T pg, tq’s under the
+identification assumptions in Section 2.2. We then discuss estimation and inference procedures for
+AT T pg, tq’s and their event-study functional ESpeq as defined in (2.3). Throughout this section, we
+focus on setups where covariates are important for identification, i.e., all the assumptions discussed
+in Section 2.2 are only plausible after you condition on covariates. Results for unconditional DDD
+setups follow as special cases by taking all covariates X “ 1 for all units. We also focus on
+staggered treatment adoption DDD setups, as they nest DDD setups with a single treatment date.
+
+4.1
+
+Identification
+
+In this section, we establish the nonparametric identification for the AT T pg, tq’s in all posttreatment periods t ě g under Assumptions S, SO, NA, and DDD-CPT. Furthermore, we demonstrate that one can utilize regression adjustment/outcome regression (RA), inverse probability
+weighting (IPW), or doubly robust estimands to recover the AT T pg, tq’s. We also demonstrate
+that one can potentially utilize different comparison groups, thereby opening the door to combining
+them for potential efficiency gains.
+Before formalizing our results, we need to introduce some additional notation.
+Let
+S“g,Q“q
+mYt ´Yt1 pXq ” E rYt ´ Yt1 |S “ g, Q “ q, Xs denote the population regression function of changes
+in outcomes from period t1 to period t given covariates X among units that enabled treatment in period g (S “ g) that belongs to eligibility group q (Q “ q). Analogously, let
+pgS“g,Q“1
+pXq ” PrS “ g, Q “ 1|X, pS “ g, Q “ 1q Y pS “ g 1 , Q “ q 1 qs denote the generalized
+1 ,q 1
+propensity score. Note that pS“g,Q“1
+pXq indicates the probability of a unit being observed in
+g 1 ,q 1
+enabling group S “ g and being eligible for treatment (Q “ 1q, conditional on pre-treatment
+covariates X and on either being in the S “ g group and being eligible for treatment, or being in
+the S “ g 1 group with eligibility to treatment Q “ q 1 .8
+For any gc P S such that gc ą maxtg, tu, and any post-treatment period t ě g, let the doubly
+robust DDD estimand for the AT T pg, tq be given by
+”´
+¯´
+¯ı
+S“g,Q“1
+S“g,Q“1
+wtrt
+pS, Qq ´ wg,0
+pS, Q, Xq Yt ´ Yg´1 ´ mS“g,Q“0
+pXq
+Yt ´Yg´1
+”´
+¯´
+¯ı
+S“g,Q“1
+S“gc ,Q“1
+` E wtrt
+pS, Qq ´ wgS“g,Q“1
+pS,
+Q,
+Xq
+Y
+´
+Y
+´
+m
+pXq
+t
+g´1
+Yt ´Yg´1
+c ,1
+”´
+¯´
+¯ı
+S“g,Q“1
+S“gc ,Q“0
+´ E wtrt
+pS, Qq ´ wgS“g,Q“1
+pS,
+Q,
+Xq
+Y
+´
+Y
+´
+m
+pXq
+,
+t
+g´1
+Yt ´Yg´1
+c ,0
+
+AT T dr,gc pg, tq “ E
+
+(4.1)
+
+8 We use this notion of generalize propensity score as it allow us to focus on sequences of two-groups comparisons as
+in Lechner (2002) and Callaway and Sant’Anna (2021). One can understand these generalized propensity scores
+S“g,Q“1
+pXq
+as pS“g,Q“1
+pXq “ pS“g,Q“1p pXq`pS“g
+with pS“g,Q“q pXq ” PrS “ g, Q “ q|Xs. We favor pS“g,Q“1
+pXq as
+1 ,Q“q 1
+g 1 ,q 1
+g 1 ,q 1
+pXq
+this is how we implement these when constructing our DDD estimators.
+
+15
+
+where the weights w are given by
+S“g,Q“1
+wtrt
+pS, Qq ”
+
+1tS “ g, Q “ 1u
+,
+Er1tS “ g, Q “ 1us
+
+1tS “ g 1 , Q “ q 1 u ¨ pS“g,Q“1
+pXq
+g 1 ,q 1
+pXq
+1 ´ pS“g,Q“1
+g 1 ,q 1
+
+wgS“g,Q“1
+pS, Q, Xq ”
+1 ,q 1
+
+«
+
+E
+
+1tS “ g 1 , Q “ q 1 u ¨ pS“g,Q“1
+pXq
+g 1 ,q 1
+
+ff .
+
+(4.2)
+
+pXq
+1 ´ pS“g,Q“q
+g 1 ,q 1
+
+Analogously, let the RA DDD estimand for the AT T pg, tq be given by
+¯ı
+”
+´
+S“gc ,Q“1
+S“gc ,Q“0
+S“g,Q“1
+pXq
+pXq
+`
+m
+pXq
+´
+m
+pS, Qq Yt ´ Yg´1 ´ mYS“g,Q“0
+AT T ra,gc pg, tq “ E wtrt
+(4.3)
+Yt ´Yg´1
+Yt ´Yg´1
+t ´Yg´1
+
+and the IPW estimand be
+”´
+¯
+ı
+S“g,Q“1
+S“g,Q“1
+wtrt
+pS, Qq ´ wg,0
+pS, Q, Xq pYt ´ Yg´1 q
+”´
+¯
+ı
+S“g,Q“1
+pY
+q
+´
+Y
+´ E wgS“g,Q“1
+pS,
+Q,
+Xq
+´
+w
+pS,
+Q,
+Xq
+.
+t
+g´1
+gc ,0
+c ,1
+
+AT T ipw,gc pg, tq “ E
+
+(4.4)
+
+Theorem 4.1. Let Assumptions S, SO, NA, and DDD-CPT hold. Then, for all g P Gtrt , t P
+t2, . . . , T u, and gc P S such that t ě g and gc ą t,
+AT T pg, tq “ AT Tdr,gc pg, tq “ AT T ra,gc pg, tq “ AT T ipw,gc pg, tq.
+
+(4.5)
+
+Theorem 4.1 is the first main result of this paper. It establishes the nonparametric identification
+of all post-treatment AT T pg, tq’s in DDD setups. It extends the DiD identification results of Callaway and Sant’Anna (2021) to DDD setups. As such, it also extends the difference-in-differences
+identification results based on the RA approach of Heckman, Ichimura and Todd (1997), the IPW
+approach of Abadie (2005), and the DR approach of Sant’Anna and Zhao (2020) to DDD setups
+with multiple periods and variation in treatment time. Theorem 4.1 also highlights that one can
+use different parts of the data-generating process to identify the AT T pg, tq’s: the RA estimand
+only models the conditional expectation of evolution of outcomes among untreated units, the IPW
+approach only models the conditional probability of being observed in a given partition of the
+S-by-Q groups, whereas the DR approach exploits both components. A big advantage of the DR
+approach is that it is based on a Neyman-orthogonal moment condition (Belloni, Chernozhukov,
+Fernández-Val and Hansen, 2017), and, therefore, it is more robust against model misspecifications
+than the IPW and RA formulations. It is very easy to show that estimators based on AT T dr,gc pg, tq
+enjoy a very attractive doubly-robust property (Sant’Anna and Zhao, 2020) that allows for some
+forms of (global) model misspecifications.9
+Another important result from Theorem 4.1 is that our DDD model is over-identified, as we
+can use multiple not-yet-treated enabling groups gc as valid comparison groups. For instance, in
+a setup with S P t2, 3, 8u, we can set gc “ 3 or gc “ 8 to identify AT T p2, 2q, and both will lead
+to the same target parameter. As a direct consequence of this result, any weighted sum of these
+estimands that use different gc ’s will also lead to the AT T pg, tq, as long as the weights sum up to
+9 For an overview of doubly robust estimators in cross-sectional designs, see section 2 of Sloczyński and Wooldridge
+(2018), and Seaman and Vansteelandt (2018).
+
+16
+
+one. We formalize this result in the following corollary, using the DR estimand; however, this also
+applies to the RA and IPW. Let Gcg,t “ tgc P S : gc ą maxtg, tuu.
+Corollary 4.1. Let Assumptions S, SO, NA, and DDD-CPT hold. Then, for all g P Gtrt and
+g,t
+that sum up to one over Gcg,t ,
+t P t2, . . . , T u such that t ě g, and any set of weights wgc
+ÿ
+AT T pg, tq “
+wgg,tc AT Tdr,gc pg, tq.
+gc PGcg,t
+
+As Corollary 4.1 indicates that all weighted sums lead to the same AT T pg, tq, a natural way to
+choose these weights is to pick them such that we maximize precision in terms of minimizing the
+resulting asymptotic variance. In the next session, we will discuss this in greater detail, connecting
+these arguments to a formulation based on generalized methods of moments using re-centered
+influence functions.
+Remark 4.1. As we discussed in Section 3, in two-period DDD setups without covariates, one can
+identify AT T p2, 2q using the difference of two DiD estimands as in (3.2) (Olden and Møen, 2022).
+This equivalence breaks down when the DDD identification assumptions are only satisfied after you
+condition on covariates X—see Figure 1. The econometric reason for this failure of equivalence is
+that one needs to integrate the covariates using the covariate distribution among treated units, i.e.,
+units with S “ 2 and Q “ 1. Proceeding as if AT T p2, 2q were the difference of two DiD estimands
+would integrate X using the covariate distribution of untreated units (S “ 8 and Q “ 1), leading
+to biases. The results in Theorem 4.1 address this problem by guaranteeing that one integrates
+out covariates using the correct reference distribution, which leads to a combination of three DiD
+estimands, not just two.
+Remark 4.2. Although Theorem 4.1 and Corollary 4.1 allow one to use several different not-yettreated cohorts gc as the comparison group, it does not allow one to pool all not-yet-treated units
+and use that pooled set of units as the aggregate comparison group to identify AT T pg, tq in DDD.
+This sharply contrasts DiD procedures such as those discussed in Callaway and Sant’Anna (2021)—
+see Figure 2a for an illustration of the bias that can arise by following this type of procedure. The
+econometric reasoning for such results is that Assumption DDD-CPT allows for both enablinggroup- and eligibility-group-specific trends, and it does not impose that the proportion of units in
+each eligibility group Q is the same across all enabling groups S. As such, Assumption DDD-CPT
+does not guarantee that, with probability one,
+E rYt p8q ´ Yt´1 p8q|S “ g, Q “ 1, Xs ´ E rYt p8q ´ Yt´1 p8q|S “ g, Q “ 0, Xs
+“
+E rYt p8q ´ Yt´1 p8q|S ą t, Q “ 1, Xs ´ E rYt p8q ´ Yt´1 p8q|S ą t, Q “ 0, Xs ,
+
+as it would be required to use the pooled, not-yet-treated units as a comparison group.
+Remark 4.3. As Theorem 4.1 establishes nonparametric identification of the AT T pg, tq’s over all
+post-treatment periods and that PpG “ g|G ` e P r1, T sq is also nonparametrically identified, it
+17
+
+follows that event-study parameters that aggregate across eligibility-groups, ESpeq as defined in
+(2.3), is also nonparametrically identified. For instance, it follows that for any event-time e ě 0,
+ÿ
+ESpeq “
+PpG “ g|G ` e P r1, T sqAT Tdr,gc pg, g ` eq.
+(4.6)
+gPGtrt
+
+One can also replace AT Tdr,gc pg, g ` eq with their analogs in Corollary 4.1 or with the RA or IPW
+estimands in Theorem 4.1. One can also use Theorem 4.1 to establish the identification of many
+other aggregate summary causal parameters discussed in Section 3 of Callaway and Sant’Anna
+(2021).
+Remark 4.4. One of the biggest appeals of DiD and DDD setups is the availability of pretreatment periods that allow the assessment of the plausibility of PT assumptions, such as Assumption DDD-CPT. Under Assumption NA, a very popular way to assess the plausibility of PT
+is to construct event-study plots based on ESpeq as in (2.3), consider both pre-treatment (e ă 0)
+and post-treatment (e ě 0) event times, and check whether pre-treatment event-study coefficients
+are all close to zero. It is straightforward to adapt this strategy in our DDD context by fixing
+the statistical estimand—for example, the AT T dr,gc pg, tq in (4.1)—consider pre-treatment periods
+t ă g, and then aggregate them using cohort-size. More specifically, for any event-time e ă 0,
+ÿ
+ESpeq “
+PpG “ g|G ` e P r1, T sqAT Tdr,gc pg, g ` eq.
+(4.7)
+gPGtrt
+
+Note that when e “ ´1, ESpeq “ 0 by construction, as we fix the baseline period at the last
+untreated period for group g, g ´ 1. Based on these event-study aggregations, it is also possible
+to conduct sensitivity analysis for the plausibility of Assumption DDD-CPT using the results in
+Rambachan and Roth (2023).
+Remark 4.5. The DR DDD estimand can also be understood as a DDD estimand that builds on
+an efficient influence function in DDD setups with two periods. See Lemma A.2 in the appendix
+for such results.
+
+4.2
+
+Estimation and inference
+
+In this section, we now propose simple-to-use plug-in estimators for the AT T pg, tqs and ESpeqs
+parameters, and discuss how one can conduct valid inference for these parameters. We focus on
+the doubly robust DDD estimator; the results for the RA and IPW DDD estimators are analogous.
+First, notice that for any gc P S such that gc ą maxtg, tu, Theorem 4.1 suggests that we can
+estimate AT T pg, tq by using the sample analogue of (4.1),
+¯´
+¯ı
+”´
+S“g,Q“1
+S“g,Q“1
+ptrt
+w
+pS, Qq ´ w
+pg,0
+pS, Q, Xq Yt ´ Yg´1 ´ m
+p S“g,Q“0
+pXq
+Yt ´Yg´1
+”´
+¯´
+¯ı
+S“g,Q“1
+S“gc ,Q“1
+ptrt
+pgS“g,Q“1
+p
+` En w
+pS, Qq ´ w
+pS,
+Q,
+Xq
+Y
+´
+Y
+´
+m
+pXq
+(4.8)
+t
+g´1
+Yt ´Yg´1
+c ,1
+”´
+¯´
+¯ı
+S“g,Q“1
+c ,Q“0
+ptrt
+pgS“g,Q“1
+p YS“g
+´ En w
+pS, Qq ´ w
+pS, Q, Xq Yt ´ Yg´1 ´ m
+pXq ,
+c ,0
+t ´Yg´1
+
+z
+AT
+T dr,gc pg, tq “ En
+
+18
+
+p are given by
+where the estimated weights w
+S“g,Q“1
+w
+ptrt
+pS, Qq ”
+
+1tS “ g, Q “ 1u
+,
+En r1tS “ g, Q “ 1us
+
+1tS “ g 1 , Q “ q 1 u ¨ ppS“g,Q“1
+pXq
+g 1 ,q 1
+1 ´ ppS“g,Q“1
+pXq
+g 1 ,q 1
+
+w
+pgS“g,Q“1
+pS, Q, Xq ”
+1 ,q 1
+
+«
+En
+
+1tS “ g 1 , Q “ q 1 u ¨ ppS“g,Q“1
+pXq
+g 1 ,q 1
+
+ff ,
+
+1 ´ ppS“g,Q“q
+pXq
+g 1 ,q 1
+
+c ,Q“1
+p YS“g
+and m
+pXq and ppS“g,Q“1
+pXq are (potentially misspecified) working models for the outcome
+g 1 ,q 1
+t ´Yg´1
+S“gc ,Q“1
+regression mYt ´Yg´1 pXq and the generalized propensity score ppgS“g,Q“1
+pXq. These estimators ex1 ,q 1
+tend the DR DiD estimator of Callaway and Sant’Anna (2021) to the DDD setup, and remain
+consistent if either outcome regression or generalized propensity score models are correctly specified. It is also worth stressing that we do not need that all generalized propensity score working
+models or all outcome regression working models in (4.8) to be correctly specified to get a consistent DDD estimator for AT T pg, tq; it suffices that any of the working models within each of
+the 3 DR DiD components of (4.8) to be correctly specified, allowing a greater deal of estimation
+flexibility.10
+z
+As Corollary 4.1 highlights, one can also combine several AT
+T dr,gc pg, tq that leverage different
+pgg,t
+that sum up to one over
+comparison groups gc , i.e., for any (consistently estimated) weights w
+c
+Gc ,
+ÿ
+1
+z
+z
+z
+w
+pgg,t
+pg,t AT
+AT
+T dr,wp pg, tq “
+AT
+T dr,gc pg, tq “ w
+T dr pg, tq,
+(4.9)
+c
+
+gc PGcg,t
+1
+
+z
+z
+pg,t is a kg,t ˆ 1
+where AT
+T dr pg, tq is the kg,t ˆ 1 vector of AT
+T dr,gc pg, tq for all gc P Gcg,t , and w
+vector of (estimated) weights that sum up to one, i.e., for a generic vector of ones 1, 11 wg,t “ 1.
+pgg,t
+A natural question that arises is: how should one choose these weights w
+? We propose to
+c
+choose the weights that lead to the asymptotically most precise (minimum variance) estimator for
+AT T pg, tq, that is, to pick weights that solve
+1
+p g,t wg,t
+min
+wg,t Ω
+g,t
+
+subject to 11 wg,t “ 1,
+
+w
+
+(4.10)
+
+p g,t is a kg,t ˆ kg,t consistent estimator for the variance-covariance matrix of AT
+z
+where Ω
+T dr pg, tq.
+Notice that the solution of (4.10) admits a closed-form solution, and the optimal weights are given
+by
+g,t
+pgmm
+w
+“
+
+p ´1
+Ω
+g,t 1
+.
+1 p ´1
+1 Ωg,t 1
+
+(4.11)
+
+z
+In turn, this implies that the linear combination of AT
+T dr,gc pg, tq that leads to the most precise
+
+10 Some people may call this a multiply-robust estimator, as one has more than two opportunities to estimate the
+target parameter consistently. For simplicity, we retain the doubly robust terminology to avoid new acronyms.
+
+19
+
+estimator for AT T pg, tq is given by
+p ´1
+11 Ω
+g,t z
+z
+AT T dr pg, tq.
+AT T dr,gmm pg, tq “
+´1
+1
+p
+1 Ωg,t 1
+
+(4.12)
+
+In many situations with multiple periods and variation in treatment time, researchers are
+interested in summarizing the AT T pg, tq’s into fewer parameters that highlight treatment effect
+heterogeneity with respect to the time elapsed since treatment take-up. That is, very often,
+researchers are interested in estimating event-study type parameters ESpeq as defined in (2.3).
+A very natural estimator for ESpeq is the plug-in estimator, where we replace AT T pg, tq with
+z
+z
+AT
+T dr,gmm pg, tq (or AT
+T dr,gc pg, tq), and PpG “ g|G ` e P r1, T sq by its sample analogue, that is,
+ÿ
+x dr,gmm peq “
+z
+ES
+Pn pG “ g|G ` e P r1, T sqAT
+T dr,gmm pg, g ` eq,
+(4.13)
+gPGtrt
+
+L řn
+ř
+where Pn pG “ g|G ` e P r1, T sq “ ni“1 1tGi “ gu1tGi ` e P r1, T su
+j“1 1tGj ` e P r1, T su. We
+x dr,gc peq analogously by replacing AT
+z
+z
+can define ES
+T dr,gmm pg, g `eq with AT
+T dr,gc pg, g `eq on (4.13).
+Based on it, we can also estimate an overall summary parameter by averaging all post-treatment
+event times, i.e.,
+ÿ
+x avg,gmm “ 1
+x dr,gmm peq.
+ES
+ES
+(4.14)
+NE ePE
+z
+Remark 4.6. It is also worth noticing that AT
+T dr,gmm pg, tq in (4.12) can be interpreted as an optimal Generalized Method of Moments (GMM) estimator based on
+re-centered influence functions.
+¯
+? ´z
+To see this, let IFdr,gc pg, tq denote the influence function of n AT T dr,gc pg, tq ´ AT Tdr,gc pg, tq .
+Let RIFdr,gc pg, tq “ IFdr,gc pg, tq ` AT T dr,gc pg, tq denote its re-centered influence function, and denote the kg,t ˆ 1 vector of all RIFdr,gc pg, tq for gc P Gcg,t by RIFdr pg, tq. Since influence functions are
+mean zero, and that AT T pg, tq “ AT Tdr,gc pg, tq for any gc P Gcg,t , we have the vector of moment
+conditions ErRIFdr pg, tq ´ θg,t s “ 0, with θg,t “ AT T pg, tq. From standard GMM results (Newey
+and McFadden, 1994), it follows that, under mild regularity conditions, the optimal (population)
+GMM estimator for θg,t is given by
+g,t
+θgmm
+“
+
+11 Ω´1
+11 Ω´1
+g,t
+g,t
+´1 ErRIFdr pg, tqs “ 1 ´1 AT Tdr pg, tq,
+1
+1 Ωg,t 1
+1 Ωg,t 1
+
+z
+where the last equality follows from ErIFdr pg, tqs “ 0. Thus, AT
+T dr,gmm pg, tq in (4.12) is the
+g,t
+sample-analogy of the efficient population GMM θgmm .
+4.2.1
+
+Asymptotic theory for ATT(g,t)’s
+
+z
+In what follows, we derive the large sample properties of our DR DDD estimators AT
+T dr,gc pg, tq
+z
+and AT
+T dr,gmm pg, tq. All our results are derived for the large n, fixed T paradigm. For
+a
+a generic Z, let ||Z|| “
+tracepZ 1 Zq denote the Euclidean norm of Z and set Wi “
+pYi,t“1 , . . . , Yi,t“T , Xi1 , Gi , Si , Qi q1 ; we will omit the index i to unclutter the notation. Let gp¨q
+20
+
+1
+
+,Q“q
+be a generic notation for the outcome regressions mYS“g
+pXq and generalized propensity scores
+t ´Yt1
+S“g,Q“1
+pg1 ,q1
+pXq, and, with some abuse of notation, let gp¨; γq denote a parametric model for gp¨q that
+ps 1
+reg 1 1
+ps
+is known up to the finite-dimensional parameters γ. For a generic κg,t
+gc “ pγg,t,gc , γg,t,gc q , with γg,t,gc
+reg
+and γg,t,g
+being nuisance parameters for the generalized propensity score and outcome regressions,
+c
+respectively, let
+g,t
+hg,t
+gc pW ; κgc q “
+
+¯
+´
+¯´
+reg
+S“g,Q“1
+S“g,Q“1
+ps
+S“g,Q“0
+pX;
+γ
+q
+wtrt
+pW q ´ wg,0
+pW ; γg,t,g
+q
+Y
+´
+Y
+´
+m
+t
+g´1
+g,t,gc
+Yt ´Yg´1
+c
+¯
+´
+¯´
+reg
+S“g,Q“1
+ps
+S“gc ,Q“1
+pX;
+γ
+q
+` wtrt
+pW q ´ wgS“g,Q“1
+pW
+;
+γ
+q
+Y
+´
+Y
+´
+m
+t
+g´1
+g,t,gc
+g,t,gc
+Yt ´Yg´1
+c ,1
+¯
+´
+¯´
+S“g,Q“1
+reg
+ps
+S“gc ,Q“0
+pX;
+γ
+q
+,
+´ wtrt
+pW q ´ wgS“g,Q“1
+pW
+;
+γ
+q
+Y
+´
+Y
+´
+m
+t
+g´1
+g,t,gc
+g,t,gc
+Yt ´Yg´1
+c ,0
+
+ps
+where the weights wpW ; γg,t,g
+q are defined similarly to those in (4.2), with the difference being
+c
+that the true unknown generalized propensity score models are replaced by working parametric
+1 ,Q“q
+ps
+counterparts, pS“g,Q“1
+pX; γg,t,g
+q, and the true unknown outcome regression models mS“g
+Yt ´Yg´1 pXq
+g 1 ,q 1
+c
+1 ,Q“q
+reg
+are also replaced with parametric working models, mYS“g
+pX; γg,t,g
+q. We denote the vector of
+c
+t ´Yg´1
+g,t
+g,t
+pseudo-true parameters by κ0,gc and let h9 g,t
+gc pκq “ Bhgc pW ; κq{Bκ.
+To derive our results, we make the following relatively mild assumptions.
+
+Assumption WM (Working Model Conditions). (i) gpx; γq is a parametric model for gpxq, where
+γ P Θ Ă Rdk is a compact set; (ii) the mapping θ ÞÑ gpX; θq is a.s. continuous; (iii) the pseudo-true
+parameter θ0 P intpΘq satisfies that for an appropriate criterion function Q : Θ Ñ R and for any
+ϵ ą 0, there exists some δ ą 0 such that inf θPΘ:}θ´θ0 }ěϵ Qpθq ´ Q pθ0 q ą δ; (iv) there exists an
+open neighborhood Θ0 Ă Θ containing θ0 such that gpX; γq is a.s. continuously differentiable in
+a neighborhood of γ0 P Θ0 . In addition, (v) there exists some ϵ ą 0 such that, for all pg, g 1 , q 1 q P
+Gtrt ˆ Gcg,t ˆ t0, 1u, we have that 0 ď pgS“g,Q“1
+pX; θq ď 1 ´ ϵ a.s. for all θ P intpΘps q, where Θps
+1 ,q 1
+denotes the parameter space of γ for the generalized propensity score working model.
+?
+Assumption ALR ( n-Asymptotically Linear Representation). Let θ̂ be a strongly consistent
+estimator of θ0 ÞÑ gpx; θ0 q and satisfy the following linear expansion
+n
+¯
+? ´
+1 ÿ
+p
+?
+n θ ´ θ0 “
+l pWi ; θ0 q ` op p1q
+(4.15)
+n i“1
+”
+ı
+1
+where l p¨; ¨q is a function such that E rl pWi ; θ0 qs “ 0; E l pWi ; θ0 q ¨ l pWi ; θ0 q ă 8 and is positive
+“
+‰
+definite; and limδÑ0 E supθPΘ0 :}θ´θ0 }ďδ }lpW ; θq ´ lpW ; θ0 q}2 “ 0.
+1
+g,t
+Assumption IC (Integrability Conditions).
+For
+ˇ eachˇıg P Gtrt , t P t2, . . . , T u, and g P Gc , assume
+”
+ˇ
+ˇ
+g,t
+2
+9 g,t
+that Er}hg,t
+gc pW ; κ0,gc q} s ă 8 and E supκPΓ0 ˇhgc pκqˇ ă 8, where Γ0 is a small neighborhood of
+
+the pseudo-true parameter κg,t
+0,gc .
+Assumptions WM, ALR, and IC are standard in the literature; see e.g., Abadie (2005);
+Wooldridge (2007); Sant’Anna and Zhao (2020); Callaway and Sant’Anna (2021). Assumptions
+21
+
+WM and ALR impose a well-behaved parametric structure for the first-step estimators for the
+nuisance parameters. This assumption is made for statistical convenience and acknowledges that,
+in many DDD applications, the number of units in each group is small, making it difficult to adopt
+a nonparametric approach reliably. It is relatively straightforward to relax these conditions and allow for nonparametric or data-adaptive/machine-learning-based estimators; see, e.g., Ahrens et al.
+(2025) for an empirically-oriented discussion of causal double machine learning methods. Assumption IC imposes mild regularity constraints on the moments of the estimating equations, preventing
+ill-behaved variance properties and ensuring the stability of higher-order approximations.
+In what follows, we omit W and X from the weights and outcome regressions to minimize
+notation, and for a generic κg,t
+gc , let
+g,t
+g,t
+g,t
+g,t
+g,t
+g,t
+ψgg,t
+pW ; κg,t
+gc q “ ψS“g,Q“0 pW ; κgc q ` ψS“gc ,Q“1 pW ; κgc q ´ ψS“gc ,Q“0 pW ; κgc q,
+c
+
+(4.16)
+
+g,t
+g,t
+where, for pg 1 , q 1 q P tpg, 0q, pgc , 1q, pgc , 0qu, ψS“g
+1 ,Q“q 1 pW ; κgc q is an influence function for one of the
+three DR DiD components of the DR DDD, and is given by
+g,t,est
+g,t,0
+g,t,1
+g,t
+g,t
+g,t
+g,t
+g,t
+ψS“g
+1 ,Q“q 1 pW ; κgc q “ ψS“g 1 ,Q“q 1 pW ; κgc q ´ ψS“g 1 ,Q“q 1 pW ; κgc q ´ ψS“g 1 ,Q“q 1 pW ; κgc q,
+
+(4.17)
+
+with
+´
+¯
+g,t,1
+S“g,Q“1
+reg
+g,t
+ψS“g
+Yt ´ Yg´1 ´ mS“a,Q“b
+pγ
+q
+1 ,Q“q 1 pW ; κgc q “ wtrt
+g,t,gc
+Yt ´Yg´1
+”
+´
+¯ı
+S“g,Q“1
+S“g,Q“1
+S“a,Q“b reg
+´ wtrt
+E wtrt
+Yt ´ Yg´1 ´ mYt ´Yg´1 pγg,t,gc q
+´
+¯
+S“g,Q“1 ps
+reg
+g,t,0
+g,t
+pγg,t,gc q Yt ´ Yg´1 ´ mS“a,Q“b
+pγ
+q
+ψS“g
+1 ,Q“q 1 pW ; κgc q “ wg 1 ,q 1
+g,t,gc
+Yt ´Yg´1
+”
+´
+¯ı
+ps
+S“g,Q“1 ps
+S“a,Q“b reg
+´ wgS“g,Q“1
+pγ
+q
+E
+w
+pγ
+q
+Y
+´
+Y
+´
+m
+pγ
+q
+1 ,q 1
+t
+g´1
+g,t,gc
+g,t,gc
+g,t,gc
+Yt ´Yg´1
+g 1 ,q 1
+and
+g,t,est
+g,t,reg
+ref
+g,t,1
+g,t,ps
+ps
+g,t,2
+g,t
+1
+g,t
+1
+g,t
+ψS“g
+1 ,Q“q 1 pW ; κgc q “ lS“g 1 ,Q“q 1 pγg,t,gc q MS“g 1 ,Q“q 1 pκgc q ` lS“g 1 ,Q“q 1 pγg,t,gc q MS“g 1 ,Q“q 1 pκgc q
+g,t,reg
+where lS“g
+1 ,Q“q 1 p¨q is the asymptotic linear representation of the outcome evolution for the group
+g,t,ps
+with S “ g 1 and Q “ q 1 as described in Assumption ALR, lS“g
+1 ,Q“q 1 p¨q is defined analogously for
+the generalized propensity score that uses group S “ a, Q “ b as a comparison group, and
+
+”´
+¯
+ı
+S“g,Q“1
+ps
+reg
+9 S“a,Q“b
+wtrt
+´ wgS“g,Q“1
+pγg,t,g
+q m
+1 ,q 1
+Yt ´Yg´1 pγg,t,gc q ,
+c
+”
+´
+¯
+ı
+g,t,2
+S“g,Q“1 ps
+reg
+S“g,Q“q ps
+g,t
+p
+9
+MS“g
+pγg,t,gc q Yt ´ Yg´1 ´ mYS“a,Q“b
+pγ
+q
+¨
+pγ
+q
+1 ,Q“q 1 pκgc q “ E αg 1 ,q 1
+1
+1
+g,t,g
+g,t,g
+g ,q
+c
+c
+t ´Yg´1
+”
+´ ”
+´
+¯ı¯
+ı
+S“g,Q“1 ps
+S“g,Q“1 ps
+S“a,Q“b reg
+ps
+´ E αg1 ,q1
+pγg,t,gc q E wg1 ,q1
+pγg,t,gc q Yt ´ Yg´1 ´ mYt ´Yg´1 pγg,t,gc q
+¨ p9S“g,Q“q
+pγ
+q
+g,t,gc
+g 1 ,q 1
+g,t,1
+g,t
+MS“g
+1 ,Q“q 1 pκgc q “ E
+
+L reg
+L ps
+reg
+S“a,Q“b reg
+S“g,Q“q
+ps
+S“g,Q“q
+ps
+with m
+9 S“a,Q“b
+pγ
+q
+“
+Bm
+pγ
+q
+Bγ
+,
+p
+9
+pγ
+q
+“
+Bp
+pγ
+q
+γg,t,gc , and
+1
+1
+1
+1
+g,t,g
+g,t,g
+g,t,g
+g,t,g
+g,t,g
+Yt ´Yg´1
+Yt ´Yg´1
+g ,q
+g ,q
+c
+c
+c
+c
+c
+1tS “ a, Q “ bu
+
+O
+
+ps
+αgS“g,Q“1
+pγg,t,g
+q“ ´
+1 ,q 1
+¯2
+c
+ps
+1 ´ pS“g,Q“1
+pX;
+γ
+q
+1
+1
+g,t,g
+g ,q
+c
+
+«
+
+E
+
+ps
+pX; γg,t,g
+q
+1tS “ a, Q “ bu ¨ pS“g,Q“1
+g 1 ,q 1
+c
+ps
+q
+1 ´ pS“g,Q“q
+pX; γg,t,g
+g 1 ,q 1
+c
+
+ff
+.
+
+For each g P Gtrt and each t P t2, 3, . . . , u, let AT T dr pg, tq denote the kg,t ˆ 1 vector of AT T dr,gc pg, tq for all (non-collinear) gc P Gcg,t , and Ωg,t be the asymptotic variance22
+
+¯
+? ´z
+covariance matrix of n AT
+T dr pg, tq ´ AT T dr pg, tq , i.e., Ωg,t “ E rψ g,t pW ; κg,t qψ g,t pW ; κg,t q1 s,
+g,t
+pW ; κg,t
+with ψ g,t pW ; κg,t q being the kg,t ˆ 1 vector that stacks all non-collinear ψgg,t
+gc q for gc P Gc .
+c
+´1 1 ´1
+Let AT T dr,gmm pg, tq “ p11 Ω´1
+g,t 1q 1 Ωg,t AT Tdr pg, tq, and for a generic set of weights that sum up
+ř
+z
+AT Tdr,gc pg, tq, and recall that AT
+T dr,wp pg, tq is its empirical
+to one, let AT T dr,w pg, tq “ gc PGcg,t wgg,t
+c
+p
+analogue as defined in (4.9). Finally, let Ωg,t be the empirical analogue of Ωg,t , where one replaces
+pg,t , and consider the following claim:
+expectations by sample analogues and κg,t with κ
+For each g P Gtrt , t P t2, . . . , T u such that t ě g, and each gc P Gcg,t ,
+we have that, for each pg 1 , q 1 q P tpg, 0q, pgc , 1q, pgc , 0qu,
+ps
+ps
+Dγ0,g,t,g
+P Θps : PppS“g,Q“q
+pX; γ0,g,t,g
+q “ pS“g,Q“q
+pXqq “ 1 or
+g 1 ,q 1
+g 1 ,q 1
+c
+c
+
+(4.18)
+
+reg
+reg
+Dγ0,g,t,g
+P Θreg : PpmgS“g,Q“q
+pX; γ0,g,t,g
+q “ mS“g,Q“q
+pXqq “ 1.
+1 ,q 1
+g 1 ,q 1
+c
+c
+
+Claim (4.18) states that for each pg, tq-pair and each suitable comparison group gc , either the
+working parametric model for the generalized propensity score is correctly specified, or the working
+outcome regression model for the comparison group is correctly specified for each of the three DiD
+components of our DDD estimator. Thus, eight possible working model combinations would lead
+to consistent DDD estimation of the AT T pg, tq parameter.
+z
+z
+The next theorem establishes the limiting distribution of AT
+T dr,gc pg, tq and AT
+T dr,gmm pg, tq.
+Theorem 4.2 (Consistency and Asymptotic Normality). Let Assumptions S, SO, NA, DDDCPT, WM, ALR, and IC hold. Then, for all g P Gtrt , t P t2, . . . , T u, and gc P Gcg,t such that t ě g,
+provided that (4.18) is true,
+n
+¯
+? ´
+1 ÿ g,t
+d
+z
+ψgc pWi ; κg,t
+n AT T dr,gc pg, tq ´ AT T pg, tq “ ?
+0,gc q ` op p1q Ñ N p0, Ωg,t,gc q,
+n i“1
+‰
+“
+g,t 1
+g,t
+pWi ; κg,t
+where Ωg,t,gc “ E ψgg,t
+0,gc qψgc pWi ; κ0,gc q . Furthermore,
+c
+n
+¯
+? ´
+11 Ω´1
+1 ÿ g,t
+d
+g,t
+z
+n AT
+T dr,gmm pg, tq ´ AT T pg, tq “ 1 ´1 ?
+ψ pWi ; κg,t
+0 q ` op p1q Ñ N p0, Ωg,t,gmm q,
+1 Ωg,t 1 n i“1
+`
+˘´1
+where Ωg,t,gmm “ 11 Ω´1
+1
+ď Ωg,t,gc for any gc P Gcg,t . In fact, for any set of weights w that
+g,t
+sum´up to one over the Gcg,t , Ωg,t,gmm
+¯ ď Ωg,t,w , with Ωg,t,w defined as the asymptotic variance of
+? z
+n AT T dr,wp pg, tq ´ AT T dr,w pg, tq .
+
+Theorem 4.2 provides the influence function for estimating each AT T pg, tq, using different comparison groups gc , as well as establishes the consistency and asymptotic normality of our DR DDD
+z
+estimator AT
+T dr,gc pg, tq. Theorem 4.2 also highlights that combining different comparison groups
+z
+as our DR DDD estimator AT
+T dr,gmm pg, tq does is effective in terms of asymptotically improving
+z
+precision. That is, Theorem 4.2 highlights that AT
+T dr,gmm pg, tq is optimal in the sense that it
+asymptotically achieves the minimum variance across all weighted average estimators that comz
+bine multiple AT
+T dr,gc pg, tqs. Importantly, Theorem 4.2 also highlights the doubly (or multiply)
+23
+
+robust property of our DDD estimators: they recover the AT T pg, tq provided that each of the
+three DR DiD estimators has a correctly specified outcome regression or generalized propensity
+score working model.
+Remark 4.7. Although Theorem 4.2 provides pointwise inference results for each AT T pg, tq, it
+is straightforward to extend it to hold simultaneously across multiple AT T pg, tq’s. For instance,
+z
+z
+by letting AT
+T gmm,těg and AT T gmm,těg denote the vector of AT
+T dr,gmm pg, tq and AT T dr,gmm pg, tq,
+respectively,
+for all g P Gtrt , t P¯ t2, . . . , T, u such that t ě g, it is straightforward to show that
+? ´z
+d
+těg 1
+těg
+těg
+n AT T gmm,těg ´ AT T gmm,těg Ñ N p0, Ωq, with Ω “ Erψgmm
+pWi ; κtěg
+0 qψgmm pWi ; κ0 q s, with
+¯
+? ´z
+těg
+ψgmm
+pWi ; κtěg
+q
+the
+asymptotic
+linear
+representation
+of
+n
+AT
+T
+´
+AT
+T
+gmm,těg
+gmm,těg . One can
+0
+then construct simultaneous confidence bands using a simple-to-use multiplier bootstrap as discussed in Theorem 3 and Algorithm 1 of Callaway and Sant’Anna (2021). It is also straightforward
+to conduct cluster-robust inference; see Remark 10 of Callaway and Sant’Anna (2021). As these
+results are commonly accessible, we will not include them here to conserve space.
+4.2.2
+
+Asymptotic theory for event-study parameters
+
+x dr,gmm peq as
+In this section, we derive large sample properties for our event-study estimator ES
+?
+defined in (4.13). Given that Pn pG “ g|G ` e P r1, T sq is an n-consistent and asymptotically
+normal estimator of PpG “ g|G ` e P r1, T sq, then for all g P Gtrt , we have that
+n
+?
+1 ÿ g,e
+npPn pG “ g|G ` e P r1, T sq ´ PpG “ g|G ` e P r1, T sqq “ ?
+ξ pWi q ` op p1q,
+n i“1
+
+(4.19)
+
+with Erξ g,e pW qs “ 0 and Erξ g,e pW qξ g,e pW q1 s ă 8 being positive definite, and
+„
+ȷ
+1
+g,e
+ξ pW q “
+¨ 1tG “ g, G ` e P r1, T su ´ PpG “ g|G ` e P r1, T sq ¨ 1tG ` e P r1, T su
+PpG ` e P r1, T sq
+The following corollary can be used to conduct asymptotically valid (pointwise) inference for
+the event-study type parameter ESpeq.
+Corollary 4.2. Under the assumptions of Theorem 4.2, for each e such that Pp1 ď G ` e ď T q,
+as n Ñ 8,
+n
+ÿ
+?
+x dr,gmm peq ´ ESpeqq “ ?1
+npES
+les,e pWi q ` op p1q
+n i“1 gmm
+d
+
+es,e
+Ñ N p0, Erlgmm
+pW q2 sq,
+es,e
+with lgmm
+pW q “
+
+ř
+gPGtrt
+
+´
+
+¯
+11 Ω´1
+g,t
+g,t
+g,t
+g,e
+PpG “ g|G ` e P r1, T sq ¨ 1 ´1 ψ pWi ; κ0 q ` ξ pWi q ¨ AT T pg, tq .
+1 Ωg,t 1
+
+z
+The results in Corollary 4.2 also apply to estimators of ESpeq using AT
+T dr,gc pg, g `eq on (4.13).
+Corollary 4.2 focuses on pointwise inference procedures. Still, as discussed in Remark 4.7, it is
+24
+
+straightforward to extend it to hold for all event-times e and conduct simultaneous-based inference.
+x avg,gmm as defined in (4.14) follow
+The asymptotic results for our overall summary parameter ES
+from the delta method and are omitted.
+
+5
+
+Monte Carlo Simulations
+
+In this section, we evaluate the finite sample properties of our proposed DR DDD estimators via
+Monte Carlo simulations. We examine two scenarios: (i) when covariates play a crucial role in
+identification across two time periods, and (ii) when there are multiple time periods with variation
+in treatment timings. For the first scenario, we have panel data for two time periods, t “ 1, 2,
+four covariates, two enabling-groups S P Sdes´1 ” t2, 8u, and there are two eligibility groups:
+Q “ 1 and Q “ 0. In the setup with staggered adoption, we consider the simplest possible case
+with three time periods, t “ 1, 2, 3, with S P Sdes´2 ” t2, 3, 8u, and we abstract from covariates
+in the main text. We relegate simulation results with DDD staggered adoption with covariates
+to the Supplemental Appendix. In the main text, we compare the performance of different DDD
+estimators via graphs: one that presents the density of the point estimates across the 1,000 Monte
+Carlo repetitions, and one that presents the length of confidence intervals in each Monte Carlo draw.
+In the Supplemental Appendix, we also report the traditional summary statistics for the Monte
+Carlo involving average bias, root mean square error (RMSE), empirical 95% coverage probability,
+and the average length of a 95% confidence interval under 1,000 Monte Carlo repetitions. Lightgray confidence intervals mean that they do not contain the true parameter of interest, AT T p2, 2q
+in our simulations, and are appropriately colored when they contain it. We focus on results with
+n “ 5, 000 but report results for different sample sizes in the Supplemental Appendix B.
+
+5.1
+
+Simulations for DDD with two periods and covariates
+
+We describe the data-generating process (DGP) for the 2-period DDD setup. For a generic fourdimensional vector O, the conditional probability of each unit belonging to a subgroup pg, qq P
+t2, 8u ˆ t0, 1u is
+PrS “ g, Q “ q|Os ” p
+
+S“g,Q“q
+
+ps
+exppfS“g,Q“q
+pOqq
+,
+ps
+pg,qqPSdes-1 ˆt0,1u exppfS“g,Q“q pOqq
+
+pOq “ ř
+
+(5.1)
+
+ps
+where fS“g,Q“q
+pOqq is a linear index with heterogeneous coefficients across sub-groups; we defined
+these in the Supplemental Appendix B.1 to save space. Of course, each unit belongs to a single
+
+25
+
+subgroup, and we assigned these subgroups as follows:
+$
+’
+’
+p8, 0q, if U ď pS“8,Q“0 pOq,
+’
+’
+’
+’
+&p8, 1q, if pS“8,Q“0 pOq ă U ď ř1 pS“8,Q“j pOq,
+j“0
+pS, Qq :“
+ř
+ř
+1
+’
+’
+p2, 0q,
+if j“0 pS“8,Q“j pOq ă U ď 1j“0 pS“8,Q“j pOq ` pS“2,Q“0 pOq,
+’
+’
+’
+ř
+’
+%p2, 1q,
+if 1j“0 pS“8,Q“j pOq ` pS“2,Q“0 pOq ă U,
+
+(5.2)
+
+with U being a uniform random variable in r0, 1s, independent of all other variables.
+The potential outcomes are defined as
+Yi,1 p8q “ f reg pOi , Si q ` νi pOi , Si , Qi q ` εi,1 p8q
+Yi,2 p8q “ 2f reg pOi , Si q ` νi pOi , Si , Qi q ` εi,2 p8q
+
+(5.3)
+
+Yi,2 p2q “ 2f reg pOi , Si q ` νi pOi , Si , Qi q ` εi,2 p2q,
+where f reg pOi , Si q is a linear regression specification with heterogeneous coefficients across the
+enabling groups S, νi pOi , Si , Qi q is a time-invariant unobserved heterogeneity correlated with covariates and sub-groups, and εi,1 p8q, εi,2 p8q and εi,2 p2q are independent standard normal random
+variables; we provide a precise definition of f reg pOi , Si q and νi pOi , Si , Qi q in the Supplemental
+Appendix B.1. Note that our designs’ AT T p2, 2q equals zero, though there is treatment effect
+heterogeneity across units. We observe untreated outcomes for all units in period t “ 1; in period
+t “ 2, we observed Yi,2 p2q if unit i belongs to group S “ 2, Q “ 1, and observe Yi,2 p8q otherwise.
+Building on Kang and Schafer (2007) and Sant’Anna and Zhao (2020), we allow propensity score
+and/or outcome regression models to be misspecified. We consider four different types of DGP:
+DGP 1, where all models are correctly specified; DGP 2, where outcome models are correctly
+specified but the propensity score model is misspecified; DGP 3, where the propensity score is
+correctly specified but outcome regressions are not; and DGP 4, where all models are misspecified.
+The source of misspecification in these nuisance models is related to whether they depend on X
+or Z, where X is a nonlinear transformation of all the Z’s. In our simulations, the observed data
+is Wi “ tYi,1 , Yi,2 , Si , Qi , Xi uni“1 , so using Z as linear covariates in these nuisance models lead to
+working model misspecification; we relegate to the Supplemental Appendix B.1 the definition of
+X’s and Z’s.
+We compare the performance of four different estimators for AT T p2, 2q, just like in Section 3.1:
+our DR DDD estimator as defined in (3.5) (we label it as DRDDD), 3WFE OLS estimator for β̃3wfe
+based on (3.3) (we label it as 3WFE), 3WFE OLS estimator of β̌3wfe based on (3.4) (we label it
+as M-3WFE), and the difference of two Sant’Anna and Zhao (2020)’ DR DiD estimators (we label
+it as DRDID-DIF). We summarize the results of our simulations in Figure 3, where we consider a
+sample size n “ 5, 000 and conducted 1,000 Monte Carlo repetitions. The left panels display the
+density of the point estimates across all Monte Carlo draws, and the right panels display the 95%
+confidence intervals for each Monte Carlo draw. See Table OA-1 in the Supplemental Appendix
+
+26
+
+for additional results.
+The results in Figure 3 are self-explanatory and firmly support our theoretical results. When
+outcome regression or propensity score models (but not necessarily both) are correctly specified, our
+DR DDD estimators are appropriately centered (so they are unbiased), their confidence intervals
+are the narrowest across all other estimators, and they still have appropriate coverage across the
+first three DGPs (94.4%, 94.5%, and 94.6%, respectively). For instance, when all working models
+are correctly specified, the average length of the 95% confidence interval of the M-3WFE estimator
+is 7 times longer than our DR DDD estimator; this difference is much larger for the other considered
+estimators. In fact, the performance of all other estimators in all our considered DGPs is poor,
+as they have non-negligible bias, high RMSE, and poor coverage properties. In DGP 4, when
+all working models are misspecified, we note that our estimator is biased, directly affecting the
+confidence intervals’ coverage probabilities. None of the considered DDD estimators perform well
+when all working models are misspecified (DGP 4), highlighting that all estimators indeed depend
+on modeling assumptions.
+
+5.2
+
+Simulations for DDD with variation in treatment timing
+
+We now discuss the staggered DDD setup with three time periods, t “ 1, 2, 3, three enabling
+groups, S P t2, 3, 8u, and two eligibility groups Q P t0, 1u. We abstract from covariates and defer
+a discussion about them to the Supplemental Appendix.
+Each unit i, we have that pS“2,Q“0 “ 0.20, pS“2,Q“1 “ 0.15, pS“3,Q“0 “ 0.30, pS“3,Q“1 “ 0.20,
+pS“8,Q“0 “ 0.05, and pS“8,Q“1 “ 0.10. We then randomly assign the realized value of pS, Qq based
+on the above distribution. The potential outcomes are generated as
+Yi,1 p8q “ p1 ` Qi qα ` νi pSi , Qi q ` εi,1 p8q
+Yi,2 p8q “ p2 ` Qi qα ` 1.1νi pSi , Qi q ` εi,2 p8q
+Yi,3 p8q “ p3 ` Qi qα ` 1.2νi pSi , Qi q ` εi,3 p8q
+Yi,2 p2q “ p2 ` Qi qα ` 1.1νi pSi , Qi q ` AT T p2, 2qQi ` εi,2 p2q
+
+(5.4)
+
+Yi,3 p2q “ p3 ` Qi qα ` 1.2νi pSi , Qi q ` AT T p2, 3qQi ` εi,3 p2q
+Yi,3 p3q “ p3 ` Qi qα ` 1.2νi pSi , Qi q ` AT T p3, 3qQi ` εi,3 p3q,
+where we set α “ 278.5, AT T p2, 2q “ 10, AT T p2, 3q “ 20, AT T p3, 3q “ 25, all εi,t p¨q are
+independent standard normal, and νi pSi , Qi q is an unobserved heterogeneity term that we formally define in the Supplemental Appendix B.2. The observed data is represented as Wi “
+tYi,1 , Yi,2 , Yi,3 , Si , Qi uni“1 , where the Yi,1 “ Yi,1 p8q, Yi,2 “ Yi,2 p2q for units with Si “ 2, Qi “ 1, and
+Yi,2 “ Yi,2 p8q otherwise, and Yi,3 “ Yi,3 p3q for units with Si “ 3, Qi “ 1, Yi,3 “ Yi,3 p2q for units
+with Si “ 2, Qi “ 1, and Yi,3 “ Yi,3 p8q for all other units. In what follows, we focus our attention
+on estimators for AT T p2, 2q, though we compare estimators for AT T p2, 3q and AT T p3, 3q in the
+
+27
+
+Figure 3: Monte Carlo Simulation Results for DDD: two-period setup with covariates
+M−3WFE
+
+M−3WFE
+
+DRDID−DIF
+
+DRDID−DIF
+
+3WFE
+
+3WFE
+
+DRDDD
+−15
+
+−10
+
+−5
+
+DRDDD
+
+0
+
+−20
+
+−15
+
+−10
+
+−5
+
+0
+
+5
+
+0
+
+5
+
+(a) DGP 1: All working models are correctly specified
+M−3WFE
+
+M−3WFE
+
+DRDID−DIF
+
+DRDID−DIF
+
+3WFE
+
+3WFE
+
+DRDDD
+−15
+
+−10
+
+−5
+
+DRDDD
+
+0
+
+−15
+
+−10
+
+−5
+
+(b) DGP 2: Outcome working models are correctly specified
+
+M−3WFE
+M−3WFE
+DRDID−DIF
+DRDID−DIF
+3WFE
+
+3WFE
+
+DRDDD
+−10
+
+−5
+
+0
+
+5
+
+DRDDD
+
+−15
+
+−10
+
+−5
+
+0
+
+5
+
+(c) DGP 3: Propensity-score working models are correctly correct
+
+M−3WFE
+M−3WFE
+DRDID−DIF
+DRDID−DIF
+3WFE
+
+3WFE
+
+DRDDD
+−10
+
+−5
+
+DRDDD
+
+0
+
+−15
+
+−10
+
+−5
+
+0
+
+(d) DGP 4: All working models are misspecified
+Notes: Simulation designs as discussed in text, with n “ 5, 000 and 1, 000 Monte Carlo repetitions. True AT T p2, 2q is zero and is
+indicated in the solid vertical line in all panels. 3WFE corresponds to the OLS estimates of β̃3wfe based on (3.3). M-3WFE corresponds
+to the OLS estimates of β̌3wfe based on (3.4). DRDID-DIF corresponds to the difference between two doubly robust DiD estimators
+(Sant’Anna and Zhao, 2020). DRDDD corresponds to our proposed doubly robust DDD estimator described in (3.5). All densities
+(left) and confidence intervals (right) are computed across all simulation draws. Light grey areas in the right plots indicate confidence
+intervals that exclude the true AT T p2, 2q, where increased prominence suggests lower empirical coverage.
+
+28
+
+Supplemental Appendix B.2. We consider n “ 5, 000 here and refer to Supplemental Appendix
+B.2 for information on other sample sizes.
+We compare the performance of three staggered DDD estimators for the AT T p2, 2q as in Section
+z
+3.2. More precisely, we consider our optimally GMM-weighted estimator AT
+T gmm pg, tq as defined
+in (3.8), which is a special case of the (4.12) without covariates, i.e., with Xi “ 1 for all units;
+we refer to this estimator as DDDgmm . We also consider our DDD estimator that uses nevertreated units as the comparison group as defined in (3.7) with gc “ 8; we refer to this estimator
+as DDDnev .11 . Finally, we consider a DDD estimator that pools all not-yet-treated units a la
+z
+Callaway and Sant’Anna (2021), AT
+T cs-nyt pg, tq, as defined in (3.6); we refer to this estimator as
+DDDcs-nyt . Our theoretical results indicated that DDDgmm and DDDnev should both be valid
+DDD estimators under our identification assumptions. At the same time, we have no statistical
+guarantee about the performance of DDDcs-nyt . Our theoretical results also suggest that DDDgmm
+should be more precisely estimated than DDDnev , as it uses more information.
+Figure 4: Monte Carlo Simulation Results for DDD: staggered setup without covariates
+DDDcs−nyt
+DDDcs−nyt
+
+DDDnev
+DDDnev
+
+DDDgmm
+
+DDDgmm
+−10
+
+−5
+
+0
+
+5
+
+10
+
+−10
+
+−5
+
+0
+
+5
+
+10
+
+(a) Comparison across the three DDD estimators
+
+DDDnev
+
+DDDnev
+
+DDDgmm
+
+DDDgmm
+9.50
+
+9.75
+
+10.00
+
+10.25
+
+10.50
+
+9.6
+
+10.0
+
+10.4
+
+(b) Comparing the performance of DDDnev and DDDgmm
+Notes: Simulation designs are detailed in the text, using n “ 5, 000 and 1,000 Monte Carlo repetitions. The true AT T p2, 2q is 10,
+marked by a solid vertical line in all panels. DDDnev denotes our DDD estimator with gc “ 8 from Equation (4.1). DDDgmm is
+our proposed DDD estimator from Equation (4.12). DDDcs´nyt is the estimator pooling all not-yet-treated units as defined in (3.6).
+In the top-left panel, we plot the densities of the DDDnev , DDDgmm , and DDDcs´nyt estimates across all simulation draws. The
+bottom-left panel zooms into the densities for DDDnev and DDDgmm . The top-right panel shows the confidence intervals for these
+estimators, while the bottom-right panel focuses on DDDnev and DDDgmm only. Light grey areas in the right plots indicate confidence
+intervals that exclude the true AT T p2, 2q, where increased prominence suggests lower empirical coverage.
+
+Figure 4 summarizes our simulation results; see also Table OA-2 in the Supplemental Appendix.
+11 This estimator is a special case of (4.8) when covariates are trivial
+
+29
+
+Panel (a) of Figure 4 compares the performance of the three estimators. As it is evident, DDDcs-nyt
+is severely biased in our design, and its confidence interval never covered the true AT T p2, 2q in the
+Monte Carlo draws. This result further highlights that proceeding as if DDD is just the difference
+of two DiD procedures can lead to misleading conclusions. At the same time, the simulations
+highlight that DDDnev and DDDgmm are unbiased and have good coverage properties, 93.2% and
+95%, respectively. In Panel (b), we drop DDDcs-nyt and focus on comparing the performance of our
+two proposed DDD estimators. As the plot makes it clear, the gains in efficiency of using all notyet-treated comparison groups as in DDDgmm are notable. The average length of the confidence
+intervals of DDDnev is more than 50% higher than that of DDDgmm . Thus, in practice, we
+recommend favoring DDDgmm , especially when the sample size of the never-enabling comparison
+group is low.
+
+6
+
+Empirical Illustrations
+
+In this section, we revisit (i) Cai (2016) and analyze the effect of agriculture insurance provision on
+household financial decisions, (ii) Cui et al. (2018) and analyze the effect of the emission trading
+scheme implemented in China on carbon emissions, and (iii) Hansen and Wingender (2023) and
+assess the impact of genetically modified crop adoption on countrywide yields. These three studies
+examine DDD setups with a single treatment date and covariates, as well as staggered DDD
+setups with and without covariates. The aim is to illustrate how our proposed estimator performs
+compared to the methods used in these original studies. Overall, we find that our DR DDD
+procedure can (a) produce substantial gains in precision, with 3WFE 95% confidence intervals
+being up to 115% wider than ours, (b) lead to different conclusions about the effect of a policy, or
+(c) provide more substantial evidence supporting the effectiveness of a policy.
+
+6.1
+
+Effect of insurance provision on financial decisions
+
+Cai (2016) analyzes the effects of agricultural insurance programs implemented in rural Chinese
+households on their production, borrowing, and saving behaviors. These rural areas are particularly
+vulnerable to unique weather shocks, resulting in income volatility for households engaged in
+agriculture. To address this, the People’s Insurance Company of China (PICC) launched the first
+weather-indexed crop-insurance program in 2003 for tobacco farmers in selected counties of Jiangxi
+province. The contracts were compulsory for tobacco growers in the treatment regions, allowing
+Cai (2016) to take advantage of the variation in insurance provision across regions and household
+types. By design, the policy aimed to simultaneously protect farm income and sustain county
+fiscal revenues that heavily depend on tobacco taxes.
+The insurance policy rollout introduces three sources of variation: the timing of insurance provision (pre-policy, February 2000, and post-policy, August 2003), geographic regions (counties that
+30
+
+enabled policy vs. those that did not), and household eligibility conditions (tobacco-specialized vs.
+other farm or off-farm households). This setup enables us to allow for industry-specific and regionspecific trends. Cai (2016) utilizes an administrative panel from the Rural Credit Cooperative
+(RCC), encompassing data from over 5,000 households annually surveyed between 2000 and 2008.
+This dataset merges financial and savings records with RCC survey details on demographics, land
+allocations, and crop revenues. It includes more than 3,000 tobacco-growing households (approximately 1,200 of which are located in treated counties) and 2,200 non-tobacco households. The
+study evaluates outcomes such as the area of tobacco production, loan size, loan limits, interest
+rates, savings rates, and flexible-term savings12 .
+We adopt a similar approach as in Cai (2016) by employing a DDD design to evaluate how
+insurance provision affects household saving behaviors. Cai (2016) considered the following 3WFE
+event study specification13 to estimate dynamic average treatment effects of insurance provision
+on household saving behavior
+ÿ
+1
+βe 1tEi,t “ eu ` Xi,j,r
+θ ` ui,t ,
+(6.1)
+Yi,t “ γi ` γr,t ` γj,t `
+e‰´1
+
+where where i, j, r, t are household, sector, region, and years indices, respectively, γi , γr,t , γj,t denote
+household fixed effects, region-by-time fixed effect and industry-by-time fixed effect, respectively,
+Ei,t “ t´Gi is the time relative to the period at which household i has received the insurance14 and
+ui,t is an idiosyncratic error term. Covariates in Xi,j,r include household size, head of household age,
+and education level. Regarding outcome variables Yi,t for measuring household saving decisions,
+Cai (2016) examines net saving, defined as the annual increase in total savings; saving rate, defined
+as the ratio of net saving to current household income; and flexible-term saving, which is the ratio
+of net savings in checking accounts to the total net savings. We compare the estimates of βe with
+those of ESpeq, as specified in (2.3), using our DR procedure, using the same set of covariates.
+In our setup, S represents the geographic region that enables or not the insurance policy, and Q
+represents the household eligibility condition—i.e., tobacco-specialized or not.
+Figure 5 plots the event study estimates for the 2003 weather insurance policy. Both the 3WFE
+and our DR DDD procedure yield similar results in terms of magnitude. However, our estimator
+offers a precision advantage in this particular context, with 3WFE 95% confidence intervals being
+up to 1.15 times wider than the one associated with our proposed DR DDD estimator. In Panel A
+of Figure 5, we observe an insignificant effect on net saving, in line with the results reported in Cai
+(2016). In Panel B, we observe a negative effect on the saving rate, consistent with previous findings
+by Cai (2016). However, unlike earlier results, which indicated an insignificant negative effect, our
+12 Although the original study analyzed outcomes related to production, borrowing, and saving behaviors, the DDD
+design specifically estimates the impact of insurance provision on borrowing and saving behavior, accounting for
+region-specific effects.
+13 See, e.g., Equations (4) and (6) in Cai (2016).
+14 In this setup, household i is considered to have received the treatment if it is located in a treated region and
+qualifies as a tobacco household.
+
+31
+
+Figure 5: Impact of Insurance Provision on Savings Decisions.
+
+Treatment Effect
+
+0.1
+
+0.0
+
+3WFE
+DRDDD
+
+−0.1
+
+ESavg = −0.008 ( 0.016 )
+95% CI = [ −0.04 , 0.023 ]
+
+−0.2
+−2
+
+−1
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+Event Time
+
+(a) Panel A: Insurance Provision on Net saving
+
+Treatment Effect
+
+0.05
+
+0.00
+3WFE
+DRDDD
+
+−0.05
+ESavg = −0.022 ( 0.011 )
+
+−0.10
+
+95% CI = [ −0.044 , −0.001 ]
+
+−0.15
+−2
+
+−1
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+Event Time
+
+(b) Panel B: Insurance Provision on Saving rate
+
+0.3
+
+Treatment Effect
+
+ESavg = 0.075 ( 0.014 )
+95% CI = [ 0.048 , 0.102 ]
+
+0.2
+
+3WFE
+0.1
+
+DRDDD
+
+0.0
+
+−2
+
+−1
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+Event Time
+
+(c) Panel C: Insurance Provision on Flexible-term saving
+Notes: This figure presents event study estimates with covariates including household size and head of household age. Panel A uses Net
+Saving as outcome, Panel B focuses on the Saving Rate, and Panel C examines Flexible-term Saving. In each panel, blue dots represent
+y dr,g peq estimates aggregated from our proposed DR
+the point estimates from the specification in (6.1), while red triangles show the ES
+c
+y avg , calculated from all ES
+y dr,g peq values to the right of the vertical dashed line at e “ ´1, is
+estimator as in (4.13). The average ES
+c
+provided alongside its bootstrapped standard errors, based on 999 repetitions, and confidence interval. The corresponding blue and red
+vertical lines represent the 95% confidence intervals.
+
+32
+
+proposed estimator reveals a small yet statistically significant negative effect at the 95% confidence
+level. This suggests a change in savings behavior after obtaining insurance. The findings in
+Panel C, consistent in magnitude with those from Cai (2016), demonstrate that weather insurance
+significantly increases the proportion of flexible-term savings. This suggests that households prefer
+to shift their savings to more flexible instruments after acquiring insurance. Visually, results in
+Panel C affirm the previous findings in Cai (2016), though we emphasize the enhanced precision
+our method provides. For example, the confidence intervals associated with βpe are 16.29%, 85.53%,
+x
+64.21%, and 115.84% wider than the confidence intervals associated with ESpeq
+at event times
+e “ 2, 3, 4, 5, respectively. This illustrates that our DDD procedure can provide much more
+powerful analysis than alternative procedures.
+
+6.2
+
+Effect of emission trading scheme on carbon emissions
+
+We next revisit the study by Cui et al. (2018), which examines the impact of the emission trading
+scheme (ETS) implemented by the Chinese government to regulate and reduce carbon emissions at
+minimal cost, focusing on its effect in promoting low-carbon innovation among firms. China tackled
+its dual objectives of economic growth and reducing carbon emissions by approving seven regional
+ETS pilot programs in 2011. These pilot programs spanned four major cities, two provinces, and
+one special economic zone, each developing their own allowance and enforcement regulations within
+national guidelines, to peak national carbon emissions by around 2030.
+Cui et al. (2018) leverages three sources of variation. First, it considers firms’ patent applications before and after the introduction of ETS pilots. Second, the pilots were launched in different
+regions whereas some regions are not impacted by the introduction of an ETS. Third, the pilots
+covered various manufacturing sectors within these regions such as power and heating, chemical,
+cement etc. Therefore, the authors utilize these variations in ETS pilots over time, across sectors, and across regions, employing a DDD approach to identify the effects of ETS on low-carbon
+innovation.
+This setup exemplifies a DDD model with variation in treatment timing and covariates. Cui
+et al. (2018) uses the year of announcement (i.e., 2011) rather than the actual launch year as
+the post-policy indicator. The regional carbon market pilots were phased in starting from 2013,
+with initial launches in Shenzhen, Shanghai, Beijing, Guangdong, and Tianjin, followed by the
+introduction in Hubei and Chongqing the subsequent year. Thus, we adjust the construction of
+the treatment variable to use the official launch date instead of the announcement date, allowing
+for staggered treatment adoption.15
+The dataset utilized in Cui et al. (2018) includes information on publicly listed firms in China
+15 We also considered the original specification using treatment announcement as the definition of the treatment. In
+such a case, the results obtained using our DR DDD procedure and those in Cui et al. (2018) are very close; these
+results are available upon request. Thus, we stress that the empirical results in this section should be interpreted
+as an extension of Cui et al. (2018), and not a “replication”.
+
+33
+
+from 2003 to 2015, sourced from the Shanghai and Shenzhen stock exchanges. This dataset
+comprises both financial data, obtained through the China Stock Market and Accounting Research
+(CSMAR), and patent application details, collected from China’s State Intellectual Property Office
+(SIPO). The dataset includes 18, 937 firm-year observations from 1, 956 firms spanning the years
+2003 to 2015. The three outcomes evaluated by Cui et al. (2018) are the number of low-carbon
+patent applications, the number of patent applications in other non-low-carbon technologies, and
+the ratio of low-carbon patents relative to the total number of patents.
+In terms of estimators, we use a 3WFE similar to Cui et al. (2018)16 , for firm i at year t
+1
+Yi,t “ γi ` γr,t ` γs,t ` β3wf e Di,t ` Xi,s,r
+θ ` εi,t ,
+
+(6.2)
+
+where β3wf e is meant to capture the impact of ETS on low-carbon technology innovation, Di,t is
+the treatment indicator post-announcement of ETS for covered sectors in pilot regions, γi is a firm
+fixed effect, γr,t and γs,t are region-by-time and sector-group-by-time fixed effects, respectively.
+Covariates Xi,s,r include firm-level attributes such as assets, revenue, and current liabilities. As we
+are also interested in treatment effect dynamics, we also consider a 3WFE event-study specification
+ÿ
+1
+Yi,t “ γi ` γr,t ` γs,t `
+βe 1tEi,t “ eu ` Xi,s,r
+θ ` ui,t ,
+(6.3)
+e‰´1
+
+where Ei,t “ t ´ Gi denotes the time relative to when the regional ETS pilot was initiated for
+firm i, and ui,t is an idiosyncratic error term. In this setup, a firm i is considered to have received
+the treatment if it is located in a region that is a carbon market pilot and its sector qualifies as a
+regulated sector by the ETS. We compare these 3WFE estimators with our DR DDD estimator
+(4.13). In our setup, S represents the year a region launched the ETS pilot, and Q represents the
+manufacturing sector that is eligible for ETS.
+Figure 6 compares the event study estimates from the specification (6.3) with the estimates
+x dr,gmm peq, as specified in (4.13), using our DR procedure. Consistent with Cui et al. (2018), we
+ES
+present results at a 90% confidence level. In Panel A, as reported by Cui et al. (2018), the ETS
+pilot appears to encourage innovation, but we cannot reject the null hypothesis of no effect at the
+same confidence level. Panel B’s results align with Cui et al. (2018), indicating minimal evidence
+for the ETS’s crowding-out effect on other patent applications. The findings in Panel C show
+no significant impact of ETS regulation on the proportion of low-carbon patents. This contrasts
+with the results associated with a 3WFE, which indicated a positive and significant effect at a
+90% confidence level17 . For instance, our method estimates an aggregate effect of 1.7% without
+sufficient evidence to reject the null hypothesis of no effect, while specification (6.2) estimates a
+significant aggregate effect of 5.3% of ETS adoption on share of low-carbon patents.
+Overall, our findings suggest there is no evidence to support that the ETS promotes innovation
+in low-carbon patents. Additionally, our tighter confidence intervals reflects that DR DDD can
+16 See, e.g., Equation (1) in Cui et al. (2018)
+17 See Table 1 in Cui et al. (2018)
+
+34
+
+Figure 6: Impact of ETS on share of low-carbon patents.
+
+ESavg,gmm = 0.166 ( 0.144 )
+
+Treatment Effect
+
+90% CI = [ −0.072 , 0.403 ]
+
+0.5
+3WFE
+DRDDDgmm
+0.0
+
+−6
+
+−5
+
+−4
+
+−3
+
+−2
+
+−1
+
+0
+
+1
+
+2
+
+Event Time
+
+(a) Panel A: Emission Trading Scheme regulation on low-carbon patents
+
+ESavg,gmm = 0.118 ( 0.177 )
+
+Treatment Effect
+
+0.5
+
+90% CI = [ −0.173 , 0.408 ]
+
+3WFE
+
+0.0
+
+DRDDDgmm
+
+−0.5
+
+−6
+
+−5
+
+−4
+
+−3
+
+−2
+
+−1
+
+0
+
+1
+
+2
+
+Event Time
+
+(b) Panel B: Emission Trading Scheme regulation on other non-low-carbon
+patents
+
+ESavg,gmm = 0.017 ( 0.021 )
+
+Treatment Effect
+
+90% CI = [ −0.018 , 0.051 ]
+
+0.05
+3WFE
+DRDDDgmm
+
+0.00
+
+−0.05
+−6
+
+−5
+
+−4
+
+−3
+
+−2
+
+−1
+
+0
+
+1
+
+2
+
+Event Time
+
+(c) Panel C: Emission Trading Scheme regulation on share of low-carbon patents
+Notes: This figure displays event study estimates incorporating firm characteristics such as total assets, total revenue, and current
+liabilities as covariates. Panel A examines the number of low-carbon patents, Panel B considers other non-carbon patents, and Panel C
+uses the proportion of low-carbon patents relative to the total number of patents. In each panel, blue dots represent the point estimates
+y dr,gmm peq estimates aggregated from our proposed DR estimator as in
+from the specification in (6.3), while red triangles show the ES
+y
+y
+(4.13). The average ES avg,gmm , calculated from all ES dr,gmm peq values to the right of the vertical dashed line at e “ ´1, is provided
+alongside its bootstrapped standard errors, based on 999 repetitions, and confidence interval. The corresponding blue and red vertical
+lines represent the 90% confidence intervals.
+
+35
+
+provide practical gains in power in empirical applications. For example, in Panel C of Figure 6, the
+confidence intervals associated with βpe are 20.28%, 24.26% and 1.51% wider than the confidence
+x dr,gmm peq at event times e “ 0, 1, 2, respectively. This implies that βpe
+intervals associated with ES
+would need a sample with 44%, 54%, and 3% more observations than our DR DDD event study
+estimator for event times zero, one, and two to achieve the same precision as DR DDD.18
+
+6.3
+
+Effect of genetically modified crops on yields
+
+Finally, we revisit the study by Hansen and Wingender (2023) on the impact of genetically modified
+(GM) crop adoption on countrywide yields. While farmers in North and South America and parts of
+Asia adopted these seeds almost immediately, regulators in the European Union, much of Africa,
+and several middle-income economies imposed outright bans or stringent de-facto restrictions,
+often in response to food-safety scares and NGO pressure. By 2019 only 29 countries permitted
+commercial cultivation, another 42 permitted imports but not planting, and the rest maintained
+comprehensive bans. This sharp global policy divergence, paired with the agronomic premise that
+pest- and herbicide-tolerant GM varieties raise yields mainly where weeds and insects are prevalent,
+sets the stage for a compelling cross-country analysis of aggregate production impacts.
+Hansen and Wingender (2023) exploits the fact that GM technologies were adopted at different
+times in various countries starting in the mid-1990s to examine the effects of GM adoption on
+outcomes such as crop yields, harvested area, and trade flows, using balanced crop-country panel
+data covering over 120 countries from 1986 to 2019. Different sources of variation underpin the
+DDD design in this context. First, there was a variation in policy timing as each country passed
+GM cultivation legislation in different years. This allows one to compare outcomes before and after
+GM commercialization is allowed, between countries that have already passed these legislations
+and those that have not yet. Second, crop eligibility for GM traits exists for only four field crops—
+cotton, maize, soybean, and rapeseed— leaving rice, wheat, and dozens of other staples as the
+primary comparisons. Differencing outcomes over time, across crops, and across policy regimes
+therefore allows for common shocks (e.g., weather, prices) and crop-specific global trends, isolating
+the causal effect of GM adoption.
+Hansen and Wingender (2023) utilizes publicly available country-level data on production quantities from FAOSTAT, covering yields (production per hectare), producer prices, and trade flows
+(exports and imports by commodity). Following their setting, our focus is also on countries with
+a minimum of 100, 000 hectares of cropland, thereby drawing attention to nations with significant
+agricultural activities. Similarly, we also include 60 field crops, including cereals, pulses, roots and
+tubers, oil crops, and fiber crops, as outlined by the FAO (Food and Agriculture Organization of
+the United Nations, 2012). Hansen and Wingender (2023) collected official legislative documents,
+18 These calculations are based on asymptotic relative efficiency. For any parameter η of a distribution F , and for
+estimators ηp1 and ηp2 approximately N pη, V1 {nq and N pη, V2 {nq, respectively, the asymptotic relative efficiency
+of ηp2 with respect to ηp1 is given by V1 {V2 ; see, e.g., Section 8.2 in van der Vaart (1998).
+
+36
+
+USDA Foreign Agricultural Service reports, and industry publications to determine the earliest
+legal and feasible year of commercial cultivation for each country-crop combination.19 In some
+cases, GM approval did not directly result in large-scale planting, while in others, formal bans
+restricted or effectively prohibited cultivation. Thus, following Hansen and Wingender (2023), we
+establish Gi,c as the first year in which a GM variety of a given crop in a given country could be
+harvested and sold commercially for human consumption or animal feed without violating a ban.20
+Hansen and Wingender (2023) considers the following event-study specification21 to asses the
+dynamic average effect of GM adoption on countrywide yields
+ÿ
+ln Yi,c,t “ γc,i ` γi,t ` γc,t `
+βe ¨ 1tEi,c,t “ eu ` εi,c,t
+(6.4)
+e­“´1
+
+where Yi,c,t denotes the yield of crop c in country i for the year t. The variable Ei,c,t “ t ´ Gi,c
+represents the time since a GM variety of a crop became legally permissible for harvest and sale for
+human consumption, and εi,c,t is an idiosyncratic error error. The specification in (6.4) includes
+three fixed effects: country-by-year fixed effects (γi,t ) to account for shocks affecting all crops in
+a particular country and year, crop-by-country fixed effects (γc,i ) to capture local time-invariant
+conditions for each crop, and crop-by-year fixed effects (γc,t ) to reflect global trends specific to each
+crop. We compare event-study estimates based on (6.4) with our proposed DR DDD-based event
+study in (4.13). In our setup, S represents the time a country allowed for GM commercialization,
+and Q represents the eligible crop.
+Figure 7 illustrates the event study estimates of the impact of GM crop adoption on yields of
+cotton, maize, rapeseed, and soybean together. Panel A shows results aligned with those in Hansen
+and Wingender (2023), with a slight enhancement in the precision of the confidence intervals. For
+instance, at event times e “ 0, the confidence intervals associated with βpe is 46.47% wider than
+x dr,gmm peq. Both methods show that approving GM technology leads to
+the one associated with ES
+a significant increase in crop yields by approximately 13%. It is not surprising that both methods
+yield similar results in this context. Despite the challenges associated with 3WFE specifications
+with variation in treatment timing (Strezhnev, 2023), there exists a very large number of neverenabling crop-country combinations, making these “forbidden comparisons” less likely to shift
+results. Indeed, as noted by Hansen and Wingender (2023), only about 2 percent of the units are
+treated during the period of analysis.
+Having said that, a potential concern that can arise is related to whether it is indeed desirable
+to use these never-enabling crop-country combinations as a “de facto” comparison group. It may
+be the case that countries that never allow harvesting and commercialization of GM crops during
+a very long period of analysis may already face lower yields or stricter farm rules, so they might
+19 For further details, refer to the documentation for GM approval dates in Hansen and Wingender (2023) Online
+Appendix B.
+20 Hansen and Wingender (2023) uses a different notation than us, and refers to our Gi,c as Eic .
+21 See, e.g., Equation (1) in Hansen and Wingender (2023).
+
+37
+
+Figure 7: Impact of GM adoption on yields
+
+0.4
+
+ESavg,gmm = 0.129 ( 0.039 )
+
+Treatment Effect
+
+95% CI = [ 0.054 , 0.205 ]
+
+0.2
+3WFE
+DRDDDgmm
+
+0.0
+
+−10
+
+−9
+
+−8
+
+−7
+
+−6
+
+−5
+
+−4
+
+−3
+
+−2
+
+−1
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10
+
+Event Time
+
+(a) Panel A: GM adoption on log-yields (full sample)
+
+0.4
+
+ESavg,gmm = 0.15 ( 0.028 )
+
+Treatment Effect
+
+95% CI = [ 0.097 , 0.204 ]
+
+0.2
+3WFE
+DRDDDgmm
+
+0.0
+
+−10
+
+−9
+
+−8
+
+−7
+
+−6
+
+−5
+
+−4
+
+−3
+
+−2
+
+−1
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10
+
+Event Time
+
+(b) Panel B: GM adoption on log-yields (dropping all never-treated)
+Notes: This figure shows event study estimates using the logarithm of crop yields as the outcome variable, without any covariates.
+The estimation window spans from 1986 to 2019, excluding country-crop combinations treated in 2010 or later. Panel A considers a
+fully balanced sample, as in Hansen and Wingender (2023), whereas Panel B excludes units never treated and forces the last cohort to
+be considered never-treated, with data post-treatment being filtered out. In each panel, blue dots represent point estimates from the
+y dr,gmm peq estimates aggregated from our proposed DR estimator as in
+specification in equation (6.4), while red triangles show the ES
+y
+y
+(4.13). The average ES avg,gmm , calculated from all ES dr,gmm peq values to the right of the vertical dashed line at e “ ´1, is provided
+alongside its bootstrapped standard errors, based on 999 repetitions, clustered at the country-crop level and its confidence interval. The
+corresponding blue and red vertical lines represent the 95% confidence intervals.
+
+38
+
+not be a necessarily good comparison group for eventually treated crop-countries observations.
+To assess the robustness of the findings in Panel A of Figure 7, we drop data for every truly
+never-enabling unit, and re-run the 3WFE regression specification (6.4) in this subsample as well
+as our staggered DDD estimator in (4.13). As Panel B in Figure 7 highlights, this has important
+consequences for the analysis: if one were to rely on (6.4), one would find much smaller effects
+compared to those in Panel A, with non-negligible pre-treatment trends that may cast doubt about
+the plausibility of the DDD design. On the other hand, when using our proposed staggered DDD
+estimator, we can see that the results remain positive and statistically significant for most eventtimes, with no very serious violation of pre-treatment trends. In fact, our estimates for ESavg
+indicate an approximate 15% increase in crop yields following GM adoption, a slightly larger (but
+statistically distinguishable) than those in Panel A. Of course, statistical precision is less accurate
+in Panel B than in Panel A, as we use a much smaller sample size.
+This result essentially highlights that the main findings in Hansen and Wingender (2023) are
+robust to dropping the never-enabling set of units from the comparison group, as long as you use
+DDD procedures that are meant to work well in such setups.
+
+7
+
+Concluding remarks
+
+This paper studied DDD estimators, paying close attention to situations where covariates are important for identification and to setups with staggered treatment adoption. Our findings challenge
+the conventional wisdom that DDD can be understood as the difference between two DiDs. We
+showed that when DDD-type parallel trends hold after conditioning on covariates, DDD estimators cannot generally be expressed as such, even in cases with only two time periods. In addition,
+when treatment adoption is staggered, pooling all not-yet-treated units is not generally valid, and
+proceeding as such can lead to misleading conclusions even when covariates are not crucial for
+the DDD identification arguments. These results highlight the need for more careful consideration
+when applying DDD strategies.
+To address these challenges, we proposed DR DDD estimators that can appropriately handle covariates and can also be used in DDD setups with staggered treatment adoption. Importantly, we proposed a DR DDD estimator that leverages information across different comparison
+groups, and our simulation results highlighted that the gains in precision can be substantial compared to alternatives. As such, we recommend practitioners to favor our proposed DDD estimator
+z
+AT
+T dr,opt pg, tq in applications. Finally, a companion R package, triplediff, is freely available on
+GitHub to automate all these DDD estimators proposed in this article, simplifying their adoption
+for practitioners.
+We envision extending our proposed DDD tools to incorporate data-adaptive and machinelearning estimators for the nuisance parameters, with a particular emphasis on training these
+models to ensure robust performance in finite samples. Additionally, we aim to generalize our
+39
+
+DDD framework to accommodate more flexible sampling schemes, such as unbalanced panel data
+or repeated cross-sectional data; see, for example, Abadie (2005), Callaway and Sant’Anna (2021),
+and Sant’Anna and Xu (2023) for related developments in DiD settings. Other promising avenues
+for future research include exploring semiparametric efficiency bounds and efficient estimation in
+overidentified DDD models (Chen, Sant’Anna and Xie, 2025), as well as using a DDD strategy to
+uncover persuasion effects (Jun and Lee, 2024). We leave a full treatment of these topics to future
+work.
+
+References
+Abadie, Alberto, “Semiparametric Difference-in-Difference Estimators,” The Review of Economic Studies, 2005, 72, 1–19.
+Abbring, Jaap H. and Gerard J. van den Berg, “The nonparametric identification of treatment
+effects in duration models,” Econometrica, 2003, 71 (5), 1491–1517.
+Ahrens, Achim, Victor Chernozhukov, Christian Hansen, Damian Kozbur, Mark Schaffer, and Thomas Wiemann, “An Introduction to Double/Debiased Machine Learning,” arXiv
+2504.08324, 2025.
+Alsan, Marcella and Marianne Wanamaker, “Tuskegee and the Health of Black Men,” The Quarterly
+Journal of Economics, 2018, 133 (1), 407–455.
+Antwi, Yaa Akosa, Asako S Moriya, and Kosali Simon, “Effects of Federal Policy to Insure Young
+Adults: Evidence from the 2010 Affordable Care Act’s Dependent-Coverage Mandate,” American Economic Journal: Economic Policy, November 2013, 5 (4), 1–28.
+Bailey, Martha J., Thomas Helgerman, and Bryan A. Stuart, “How the 1963 Equal Pay Act and
+1964 Civil Rights Act Shaped the Gender Gap in Pay,” The Quarterly Journal of Economics, 2024,
+139 (3), 1827–1878.
+Baker, Andrew, Brantly Callaway, Scott Cunningham, Andrew Goodman-Bacon, and Pedro
+H. C. Sant’Anna, “Difference-in-Differences Designs: A Practitioner’s Guide,” Journal of Economic
+Literatura, 2025, Forthcoming.
+Belloni, Alexandre, Victor Chernozhukov, Iván Fernández-Val, and Christian Hansen, “Program Evaluation and Causal Inference With High-Dimensional Data,” Econometrica, 2017, 85 (1),
+233–298.
+Borusyak, Kirill, Xavier Jaravel, and Jann Spiess, “Revisiting Event-Study Designs: Robust and
+Efficient Estimation,” The Review of Economic Studies, 02 2024, 91 (6), 3253–3285.
+Cai, Jing, “The Impact of Insurance Provision on Household Production and Financial Decisions,”
+American Economic Journal: Economic Policy, May 2016, 8 (2), 44–88.
+Callaway, Brantly and Pedro HC Sant’Anna, “Difference-in-differences with multiple time periods,”
+Journal of econometrics, 2021, 225 (2), 200–230.
+Caron, Laura, “Triple Difference Designs with Heterogeneous Treatment Effects,” arXiv:2502.19620,
+2025.
+
+40
+
+Chaisemartin, Clément De and Xavier d’Haultfoeuille, “Two-way fixed effects estimators with
+heterogeneous treatment effects,” American Economic Review, 2020, 110 (9), 2964–2996.
+and
+
+, “Difference-in-Differences Estimators of Intertemporal Treatment Effects,” The Review of
+
+Economics and Statistics, 2024, Forthcoming.
+Chen, Xiaohong, Pedro H. C. Sant’Anna, and Haitian Xie, “Efficient Difference-in-Differences
+and Event Study Estimators,” arXiv:2506.17729, 2025.
+Chiu, Albert, Xingchen Lan, Ziyi Liu, and Yiqing Xu, “Causal Panel Analysis under Parallel
+Trends: Lessons from A Large Reanalysis Study,” American Political Science Review, 2025, Forthcoming.
+Cui, Jingbo, Junjie Zhang, and Yang Zheng, “Carbon Pricing Induces Innovation: Evidence from
+China’s Regional Carbon Market Pilots,” AEA Papers and Proceedings, May 2018, 108, 453–57.
+Food and Agriculture Organization of the United Nations, “Global Agro-ecological Zones (GAEZ)
+v3.0,” https://www.gaez.iiasa.ac.at 2012.
+Garthwaite, Craig, Tal Gross, and Matthew J. Notowidigdo, “Public Health Insurance, Labor
+Supply, and Employment Lock,” The Quarterly Journal of Economics, 03 2014, 129 (2), 653–696.
+Goodman-Bacon, Andrew, “Difference-in-differences with variation in treatment timing,” Journal of
+Econometrics, 2021, 225 (2), 254–277.
+Gruber, Jonathan, “The Incidence of Mandated Maternity Benefits,” American Economic Review,
+June 1994, 84 (3), 622–641.
+Hansen, Casper Worm and Asger Mose Wingender, “National and Global Impacts of Genetically
+Modified Crops,” American Economic Review: Insights, June 2023, 5 (2), 224–240.
+Heckman, James J., Hidehiko Ichimura, and Petra Todd, “Matching as an Econometric Evaluation Estimator: Evidence from Evaluating a Job Training Programme,” The Review of Economic
+Studies, 1997, 64 (4), 605–654.
+Jun, Sung Jae and Sokbae Lee, “Learning the Effect of Persuasion via Difference-In-Differences,”
+arXiv:2410.14871, 2024.
+Kang, Joseph D. Y. and Joseph L. Schafer, “Demystifying Double Robustness: A Comparison of
+Alternative Strategies for Estimating a Population Mean from Incomplete Data,” Statistical Science,
+2007, 22 (4), 523 – 539.
+Khan, Shakeeb and Elie Tamer, “Irregular Identification, Support Conditions, and Inverse Weight
+Estimation,” Econometrica, 2010, 78 (6), 2021–2042.
+Lechner, Michael, “Program Heterogeneity and Propensity Score Matching: An Application to the
+Evaluation of Active Labor Market Policies,” The Review of Economics and Statistics, 2002, 84 (2),
+205–220.
+Malani, Anup and Julian Reif, “Interpreting pre-trends as anticipation: Impact on estimated treatment effects from tort reform,” Journal of Public Economics, 2015, 124, 1–17.
+Mogstad, Magne and Alexander Torgovitsky, “Chapter 1 - Instrumental variables with unobserved
+heterogeneity in treatment effects,” in Christian Dustmann and Thomas Lemieux, eds., Handbook of
+Labor Economics, Vol. 5, Elsevier, 2024, pp. 1–114.
+
+41
+
+Newey, Whitney K. and Daniel McFadden, “Large sample estimation and hypothesis testing,” in
+“Handbook of Econometrics,” Vol. 4, Amsterdam: North-Holland: Elsevier, 1994, chapter 36, pp. 2111–
+2245.
+Olden, Andreas and Jarle Møen, “The triple difference estimator,” The Econometrics Journal, 2022,
+25 (3), 531–553.
+Patnaik, Ankita, “Reserving Time for Daddy: The Consequences of Fathers’ Quotas,” Journal of Labor
+Economics, 2019, 37 (4), 1009–1059.
+Rambachan, Ashesh and Jonathan Roth, “A More Credible Approach to Parallel Trends,” The
+Review of Economic Studies, 02 2023, 90 (5), 2555–2591.
+Robins, James, “A New Approach To Causal Inference in Mortality Studies With a Sustained Exposure
+Period - Application To Control of the Healthy Worker Survivor Effect,” Mathematical Modelling, 1986,
+7, 1393–1512.
+Roth, Jonathan, Pedro H. C. Sant’Anna, Alyssa Bilinski, and John Poe, “What’s Trending in
+Difference-in-Differences? A Synthesis of the Recent Econometrics Literature,” Journal of Econometrics, 2023, 235 (2), 2218–2244.
+Sant’Anna, Pedro H.C. and Jun Zhao, “Doubly Robust Difference-in-Differences Estimators,” Journal of Econometrics, 2020, 219 (1), 101–122.
+and Qi Xu, “Difference-in-Differences with Compositional Changes,” 2023. Working Paper.
+Seaman, Shaun R and Stijn Vansteelandt, “Introduction to Double Robust Methods for Incomplete
+Data,” Statistical Science, 2018, 33 (2), 184–197.
+Sloczyński, Tymon and Jeffrey M Wooldridge, “A General Double Robustness Result for Estimating Average Treatment Effects,” Econometric Theory, 2018, 34 (1), 112–133.
+Strezhnev, Anton, “Decomposing Triple-Differences Regression under Staggered Adoption,” 2023.
+Sun, Liyang and Sarah Abraham, “Estimating dynamic treatment effects in event studies with
+heterogeneous treatment effects,” Journal of Econometrics, 2021, 225 (2), 175–199.
+Sloczyński, Tymon, “Interpreting OLS Estimands When Treatment Effects Are Heterogeneous: Smaller
+Groups Get Larger Weights,” The Review of Economics and Statistics, 2022, 104 (3), 501—-509.
+, “When Should We (Not) Interpret Linear IV Estimands as LATE?,” arXiv:2011.06695, 2024.
+van der Vaart, Aad W., Asymptotic Statistics, Cambridge: Cambridge University Press, 1998.
+Walker, W. Reed, “The Transitional Costs of Sectoral Reallocation: Evidence From the Clean Air Act
+and the Workforce,” The Quarterly Journal of Economics, 2013, 128 (4), 1787–1835.
+Wooldridge, Jeffrey M., “Inverse probability weighted estimation for general missing data problems,”
+Journal of Econometrics, 2007, 141 (2), 1281–1301.
+Wooldridge, Jeffrey M, “Two-way fixed effects, the two-way mundlak regression, and difference-indifferences estimators,” 2021. Working Paper.
+
+42
+
+Better Understanding Triple Differences Estimators:
+Supplemental Appendix
+Marcelo Ortiz-Villavicencio
+
+Pedro H.C. Sant’Anna
+
+July 21, 2025
+This Supplementary Appendix includes: (a) proofs for the results presented in the main
+paper; and (b) details about the data-generating process (DGP) used in the Monte Carlo
+simulations to illustrate the finite sample properties of our DR DDD method.
+
+A
+
+Proofs of Main Results
+
+We begin by proving auxiliary lemmas that are foundational for establishing the main results
+of the paper. Initially, consider the conditional AT T pg, tq, and for simplicity, we omit the
+unit indexing i.
+CAT TX pg, tq ” ErYt pgq ´ Yt p8q|X, S “ g, Q “ 1s
+Lemma A.1. Let Assumptions S, SO, NA, and DDD-CPT hold. Then, for all g P Gtrt ,
+t P t2, . . . , T u, and gc P S such that t ě g and gc ą t,
+CAT TX pg, tq “ pErYt ´ Yg´1 |X, S “ g, Q “ 1s ´ ErYt ´ Yg´1 |X, S “ g, Q “ 0sq
+´ pErYt ´ Yg´1 |X, S “ gc , Q “ 1s ´ ErYt ´ Yg´1 |X, S “ gc , Q “ 0sq almost surely.
+Proof. All equalities below are understood to hold almost surely (a.s.), conditioning on X
+throughout.
+CAT TX pg, tq “ ErYt pgq ´ Yg´1 p8q|X, S “ g, Q “ 1s ´ ErYt p8q ´ Yg´1 p8q|X, S “ g, Q “ 1s
+“ ErYt pgq ´ Yg´1 p8q|X, S “ g, Q “ 1s ´ ErYt p8q ´ Yg´1 p8q|X, S “ g, Q “ 0s
+´ ErYt p8q ´ Yg´1 p8q|X, S “ g 1 , Q “ 1s ` ErYt p8q ´ Yg´1 p8q|X, S “ g 1 , Q “ 0s
+“ ErYt ´ Yg´1 |X, S “ g, Q “ 1s ´ ErYt ´ Yg´1 |X, S “ g, Q “ 0s
+´ ErYt ´ Yg´1 |X, S “ gc , Q “ 1s ` ErYt ´ Yg´1 |X, S “ gc , Q “ 0s,
+where the first equality is derived by algebraically adding and subtracting the term ErYg´1 p8q|X, S “
+g, Q “ 1s. The second equality is obtained based on Assumption DDD-CPT, and the final
+equality arises from the definition in (2.1) along with Assumption NA.
+Consider the population regression function representing the changes in outcomes from
+period t to t1 given the covariates as mYS“g,Q“q
+pXq “ ErYt ´ Yt1 | S “ g, Q “ q, Xs. Given the
+t ´Yt1
+weights defined in equation (4.2), we then proceed to derive the efficient influence function in
+OA - 1
+
+the following lemma. For notational simplicity, assume the simplest scenario with two time
+periods t P t1, 2u, two treatment groups Si P t2, 8u, and two eligibility groups Qi P t0, 1u,
+thus we derive the efficient influence function for the AT T p2, 2q in the following lemma.
+Lemma A.2 (Efficient Influence Function). Suppose Assumptions S, SO, NA, and DDDCPT hold. Let τ pXq ” Y2 ´ Y1 ´ mYS“2,Q“0
+pXq ´ mS“8,Q“1
+pXq ` mS“8,Q“0
+pXq and the
+Y2 ´Y1
+Y2 ´Y1
+2 ´Y1
+observed data O ” pY2 , Y1 , S, Q, Xq. Then, the efficient influence function for the AT T p2, 2q
+is given by
+S“2,Q“1
+ηef f pOq “ wtrt
+pS, Qq ¨ pτ pXq ´ AT T p2, 2qq
+´
+¯
+S“2,Q“0
+S“2,Q“0
+´ wcomp pS, Q, Xq ¨ Y2 ´ Y1 ´ mY2 ´Y1 pXq
+´
+¯
+S“8,Q“1
+´ wcomp
+pS, Q, Xq ¨ Y2 ´ Y1 ´ mS“8,Q“1
+pXq
+Y2 ´Y1
+´
+¯
+S“8,Q“0
+` wcomp
+pS, Q, Xq ¨ Y2 ´ Y1 ´ mS“8,Q“0
+pXq
+,
+Y2 ´Y1
+
+where
+
+S“2,Q“1
+wtrt
+pS, Qq ”
+
+1tS “ 2, Q “ 1u
+,
+Er1tS “ 2, Q “ 1us
+
+1tS “ g, Q “ qu ¨ pS“2,Q“1 pXq
+pS“g,Q“q pXq
+S“g,Q“q
+wcomp
+pS, Q, Xq ” „
+ȷ.
+1tS “ g, Q “ qu ¨ pS“2,Q“1 pXq
+E
+pS“g,Q“q pXq
+
+Proof. We follow Hahn (1998) and Chen, Hong and Tarozzi (2008) to structure a efficient
+influence function as in Newey (1990). Let the conditional density f py2 , y1 | g, q, xq “ f pY2 “
+y2 , Y1 “ y1 | S “ g, Q “ q, X “ xq. The proof is organized into three steps: (i) First, we
+define the tangent space of the statistical model. (ii) Next, we demonstrate that the target
+parameter related to the parametric sub-model is pathwise differentiable. (iii) Finally, we
+confirm that all conditions specified in Newey (1990) are met to ensure the derived influence
+function is efficient.
+Step 1: The density (likelihood) of the observed data O P R2 ˆ S ˆ t0, 1u ˆ Rd can be
+represented by
+“
+‰ḡq̄ “
+‰ḡp1´q̄q
+f py2 , y1 , g, q, xq “f pxq ˆ f py2 , y1 | 2, 1, xq ¨ pS“2,Q“1 pxq ˆ f py2 , y1 | 2, 0, xq ¨ pS“2,Q“0 pxq
+“
+‰p1´ḡqq̄
+ˆ f py2 , y1 | 8, 1, xq ¨ pS“8,Q“1 pxq
+“
+‰p1´ḡqp1´q̄q
+ˆ f py2 , y1 | 8, 0, xq ¨ pS“8,Q“0 pxq
+where ḡ “ 1tS “ 2u and q̄ “ 1tQ “ 1u. Consider the regular parametric submodel, with the
+true model indexed by θ “ 0,
+”
+ıḡq̄ ”
+ıḡp1´q̄q
+S“2,Q“0
+fθ py2 , y1 , g, q, xq “fθ pxq ˆ fθ py2 , y1 | 2, 1, xq ¨ pS“2,Q“1
+pxq
+ˆ
+f
+py
+,
+y
+|
+2,
+0,
+xq
+¨
+p
+pxq
+θ 2 1
+θ
+θ
+
+OA - 2
+
+”
+ıp1´ḡqq̄
+ˆ fθ py2 , y1 | 8, 1, xq ¨ pS“8,Q“1
+pxq
+θ
+”
+ıp1´ḡqp1´q̄q
+ˆ fθ py2 , y1 | 8, 0, xq ¨ pS“8,Q“0
+pxq
+θ
+The corresponding score function of this submodel for all pg, qq P S ˆ t0, 1u is given by
+p9S“2,Q“0
+p9S“2,Q“1 pxq
+pxq
+θ
+` ḡp1 ´ q̄qsθ py2 , y1 | 2, 0, xq ` ḡp1 ´ q̄q S“2,Q“0
+sθ py2 , y1 , g, ℓ, xq “ḡ q̄sθ py2 , y1 | 2, 1, xq ` ḡ q̄ θS“2,Q“1
+pxq
+pxq
+pθ
+pθ
+p9S“8,Q“1
+pxq
+θ
+` p1 ´ ḡqq̄sθ py2 , y1 | 8, 1, xq ` p1 ´ ḡqq̄ S“8,Q“1
+pxq
+pθ
+p9S“8,Q“0
+pxq
+θ
+` p1 ´ ḡqp1 ´ q̄qsθ py2 , y1 | 8, 0, xq ` p1 ´ ḡqp1 ´ q̄q S“8,Q“0
+pxq
+pθ
+` tθ pxq,
+where
+B
+B
+B
+log fθ py2 , y1 | g, q, xq , p9θS“g,Q“q pxq “ pθS“q,Q“q pxq, and tθ pxq “
+log fθ pxq.
+Bθ
+Bθ
+Bθ
+Therefore, the tangent space is the characterized by
+␣
+T “ ḡ q̄s2,1 py2 , y1 , xq ` ḡ q̄p2,1 pxq ` ḡp1 ´ q̄qs2,0 py2 , y1 , xq ` ḡp1 ´ q̄qp2,0 pxq
+
+sθ py2 , y1 | g, q, xq “
+
+` p1 ´ ḡqq̄s8,1 py2 , y1 , xq ` p1 ´ ḡqq̄p8,1 pxq
+(
+` p1 ´ ḡqp1 ´ q̄qs8,0 py2 , y1 , xq ` p1 ´ ḡqp1 ´ q̄qp8,0 pxq ` lpxq ,
+where pg,q p¨q and lp¨q are the scores of propensity scores and marginal density of x, respectively. Furthermore, for any functions tsg,q p¨, ¨, ¨q, pg,q p¨qupg,qqPSˆt0,1u , and lp¨q such that, for
+every pg, qq P S ˆ t0, 1u,
+ż ż
+sg,q p¨, ¨, ¨q P L2 pY2 ˆ Y1 ˆ X q, with
+sg,q py2 , y1 , xqf py2 , y1 | g, q, xqdy1 dy2 “ 0, @x P X ,
+(A.1)
+pg,q p¨q P L2 pX q, with
+
+ÿ
+
+ż
+pg,q pxqf pxqdx “ 0
+
+(A.2)
+
+pg,qqPSˆt0,1u
+
+ż
+lp¨q P L2 pX q, with
+
+lpxqf pxqdx “ 0.
+
+(A.3)
+
+Step 2: Given Lemma A.1, AT T p2, 2q can be identified as
+„
+`
+˘
+AT T p2, 2q “ E ErY2 ´ Y1 | S “ 2, Q “ 1, Xs ´ ErY2 ´ Y1 | S “ 2, Q “ 0, Xs
+ȷ
+˘
+´ ErY2 ´ Y1 | S “ 8, Q “ 1, Xs ´ ErY2 ´ Y1 | S “ 8, Q “ 0, Xs S “ 2, Q “ 1
+`
+
+In order to show that AT T p2, 2q is pathwise differentiable within the parameterized submodel,
+OA - 3
+
+let’s denote τ ” AT T p2, 2q and define:
+´ţ
+
+¯
+ţ
+S“2,Q“1
+∆ypS“2,Q“1
+pxqf
+py
+,
+y
+|
+2,
+1,
+xqf
+pxqdy
+dy
+dx
+´
+∆yp
+pxqf
+py
+,
+y
+|
+2,
+0,
+xqf
+pxqdy
+dy
+dx
+2
+1
+2
+1
+2
+1
+2
+1
+θ
+θ
+θ
+θ
+θ
+θ
+τ pθq “
+ş S“2,Q“1
+pθ
+pxqfθ pxqdx
+´ţ
+¯
+ţ
+S“2,Q“1
+∆ypS“2,Q“1
+pxqf
+py
+,
+y
+|
+8,
+1,
+xqf
+pxqdy
+dy
+dx
+´
+∆yp
+pxqf
+py
+,
+y
+|
+8,
+0,
+xqf
+pxqdy
+dy
+dx
+2
+1
+2
+1
+2
+1
+2
+1
+θ
+θ
+θ
+θ
+θ
+θ
+´
+ş S“2,Q“1
+pθ
+pxqfθ pxqdx
+
+where ∆y “ y2 ´ y1 . We now need to compute the derivative of τ pθq with respect to θ and
+evaluate it at the point θ “ 0, specifically dτ pθq{dθ|θ“0 . For notational convenience, let
+¡
+ÿ
+ḡ`q̄
+N pθq “
+p´1q
+∆ypθS“2,Q“1 pxqfθ py2 , y1 | g, q, xq fθ pxqdy2 dy1 dx
+pg,qqPSˆt0,1u
+
+ż
+Dpθq “
+
+pS“2,Q“1
+pxqfθ pxqdx
+θ
+
+where the factor p´1qḡ`q̄ determines the sign corresponding to each pair pg, qq P S ˆ t0, 1u.
+Thus, we have τ pθq “ N pθq{Dpθq. By differentiating τ pθq with respect to θ using the quotient
+rule we obtain:
+N 1 pθqDpθq ´ N pθqD1 pθq
+dτ pθq
+“
+dθ
+rDpθqs2
+Evaluating at θ “ 0 (and denoting quantities at θ “ 0 by dropping the θ subscript, e.g.
+pp1, 1; xq “ pθ“0 p1, 1; xq and f pxq “ fθ“0 pxq), we obtain
+ˇ
+N 1 p0q
+dτ pθq ˇˇ
+D1 p0q
+“
+´
+τ
+p0q
+dθ ˇθ“0
+Dp0q
+Dp0q
+ş S“2,Q“1
+In our notation, Dp0q “ p
+pxqf pxqdx “ pS“2,Q“1 and τ “ τ p0q. Both N pθq and Dpθq
+involve integrals of functions that depend on θ via three components: the propensity score
+pS“2,Q“1
+pxq, the joint conditional density fθ py2 , y1 | g, q, xq, and the marginal density fθ pxq.
+θ
+Under standard regularity conditions, we differentiate inside the integrals using the chain
+rule. In particular, the following identities will be used:
+ˇ
+Bfθ py2 , y1 | g, q, xq ˇˇ
+(A.4)
+“ s py2 , y1 | g, q, xq f py2 , y1 | g, q, xq ,
+ˇ
+Bθ
+θ“0
+ˇ
+ˇ
+BpS“2,Q“1
+pxq
+ˇ
+θ
+“ p9S“2,Q“1 pxq,
+(A.5)
+ˇ
+ˇ
+Bθ
+ˇθ“0
+Bfθ pxq ˇˇ
+“ tpxqf pxq.
+(A.6)
+Bθ ˇθ“0
+We gather the contributions from each derivative of the joint conditional density across all
+
+OA - 4
+
+possible combinations of pg, qq P S ˆ t0, 1u,
+¡
+ÿ
+ḡ`q̄
+p´1q
+∆ypS“2,Q“1 pxqs py2 , y1 | g, q, xq f py2 , y1 | g, q, xq f pxqdy2 dy1 dx
+pg,qqPSˆt0,1u
+
+Similarly, we collect the contributions from each derivative of pS“2,Q“1 pxq,
+¡
+ÿ
+ḡ`q̄
+p´1q
+∆y p9S“2,Q“1 pxqf py2 , y1 | g, q, xq f pxqdy2 dy1 dx.
+pg,qqPSˆt0,1u
+
+and the contributions from each derivative of f pxq
+¡
+ÿ
+ḡ`q̄
+p´1q
+∆ypS“2,Q“1 pxqf py2 , y1 | g, q, xq tpxqf pxqdy2 dy1 dx.
+pg,qqPSˆt0,1u
+
+Then, when combining the contributions from the derivatives of pS“2,Q“1 pxq and f pxq in
+N 1 p0q and comparing with D1 p0q, one finds that subtracting by τ appears naturally. Thus,
+putting everything together, the derivative of τ pθq at θ “ 0 becomes
+ţ
+ˇ
+ÿ
+∆ypS“2,Q“1 pxqs py2 , y1 | g, q, xq f py2 , y1 | g, q, xq f pxqdy2 dy1 dx
+dτ pθq ˇˇ
+ḡ`q̄
+p´1q
+“
+dθ ˇθ“0 pg,qqPSˆt0,1u
+pS“2,Q“1
+ş
+pτ pxq ´ τ qp9S“2,Q“1 pxqf pxqdx
+`
+pS“2,Q“1
+ş
+pτ pxq ´ τ qpS“2,Q“1 pxqtpxqf pxqdx
+`
+.
+pS“2,Q“1
+A parameter is considered pathwise differentiable if its derivative, evaluated along any
+smooth parametric submodel, can be expressed as the covariance between a suitable function
+and the score of the model. Let
+!
+)
+“1
+ḡ q̄ ∆y ´ mG“2,P
+pxq
+∆
+Fτ pOq “
+S“2,Q“1
+p
+!
+)
+!
+)
+$
+S“2,Q“0
+S“8,Q“1
+&
+ḡp1
+´
+q̄q
+∆y
+´
+m
+pxq
+p1
+´
+ḡqq̄
+∆y
+´
+m
+pxq
+S“2,Q“1
+y2 ´y1
+y2 ´y1
+p
+pxq
+` S“2,Q“1
+´
+´
+S“2,Q“0
+S“8,Q“1
+%
+p
+p
+pxq
+p
+pxq
+!
+),
+.
+p1 ´ ḡqp1 ´ q̄q ∆y ´ myS“8,Q“0
+pxq
+2 ´y1
+`
+pS“8,Q“0 pxq
+"
+*
+ż
+ÿ
+ḡ q̄
+S“g,Q“q
+S“g,Q“q
+ḡ`q̄
+` S“2,Q“1
+p´1q
+my2 ´y1 pxq ´ my2 ´y1 pxqf pxqdx .
+p
+pg,qqPSˆt0,1u
+For the parametric submodel with score function sθ py1 , y0 , g, q, xq, we can express the deriva-
+
+OA - 5
+
+tive of τ pθq with respect to θ as follows:
+Bτ pθq
+“ E rFτ pOq ¨ s0 pOqs
+Bθ θ“0
+therefore, concluding that τ is pathwise differentiable.
+Step 3: To show that Fτ pOq is the efficient influence function for τ , we verify equation (9)
+and Theorem 3.1 in Newey (1990). This requires showing that Fτ p¨q belongs to the tangent
+space T . Notice that terms in Fτ p¨q can be re-expressed for all pairs pg, qq as follows:
+)
+!
+1
+S“2,Q“1
+s2,1 py2 , y1 , xq “ S“2,Q“1 y2 ´ y1 ´ my2 ´y1 pxq ,
+p
+)
+!
+S“g,Q“q
+S“2,Q“1
+p
+pxq y2 ´ y1 ´ my2 ´y1 pxq
+1
+sg,q py2 , y1 , xq “ S“2,Q“1 p´1qḡ`q̄
+,
+p
+pS“g,Q“q pxq
+"
+*
+ż
+ÿ
+1
+S“g,Q“q
+S“g,Q“q
+ḡ`q̄
+p2,1 pxq “ S“2,Q“1
+my2 ´y1 pxq ´ my2 ´y1 pxqf pxqdx ,
+p´1q
+p
+pg,qqPSˆt0,1u
+pg,q pxq “ 0 and,
+
+lpxq “ 0.
+
+Hence, one can easily confirm that the conditions outlined in equations (A.1) through (A.3)
+are satisfied, thereby establishing the desired result. Finally, notice that for any pair pg, qq
+we have
+ȷ
+„
+1tS “ g, Q “ qu ¨ pS“2,Q“1 pXq
+S“2,Q“1
+p
+“E
+pS“g,Q“q pXq
+and through straightforward algebraic manipulation, Fτ p¨q can be restated as
+´
+¯
+1tS “ 2, Q “ 1u
+S“8,Q“1
+S“8,Q“0
+Fτ pOq “
+¨ Y2 ´ Y1 ´ mYS“2,Q“0
+pXq
+´
+m
+pXq
+`
+m
+pXq
+´
+τ
+Y2 ´Y1
+Y2 ´Y1
+2 ´Y1
+E r1tS “ 2, Q “ 1us
+¨
+˛
+1tS“2,Q“0u¨pS“2,Q“1 pXq
+´
+¯
+pS“2,Q“0 pXq
+S“2,Q“0
+ı‚
+´ Y2 ´ Y1 ´ mY2 ´Y1 pXq ¨ ˝ ”
+S“2,Q“1 pXq
+E 1tS“2,Q“0u¨p
+pS“2,Q“0 pXq
+˛
+¨
+1tS“8,Q“1u¨pS“2,Q“1 pXq
+¯
+´
+pS“8,Q“1 pXq
+ı‚
+pXq ¨ ˝ ”
+´ Y2 ´ Y1 ´ mS“8,Q“1
+Y2 ´Y1
+1tS“8,Q“1u¨pS“2,Q“1 pXq
+E
+pS“8,Q“1 pXq
+¨
+˛
+1tS“8,Q“0u¨pS“2,Q“1 pXq
+¯
+´
+S“8,Q“0
+p
+pXq
+ı‚
+pXq ¨ ˝ ”
+` Y2 ´ Y1 ´ mS“8,Q“0
+Y2 ´Y1
+1tS“8,Q“0u¨pS“2,Q“1 pXq
+E
+pS“8,Q“0 pXq
+“ ηef f pOq
+Therefore, the proof is concluded.
+Proof of Theorem 4.1
+
+OA - 6
+
+Proof. We start by showing that AT T pg, tq “ AT Tra,gc pg, tq. Given Lemmas A.1 and A.2,
+AT T pg, tq “ ErCAT Tx pg, tq|S “ g, Q “ 1s
+„
+“ E rErYt ´ Yg´1 |X, S “ g, Q “ 1s|S “ g, Q “ 1s ´ E ErYt ´ Yg´1 |X, S “ g, Q “ 0s
+ˇ
+ȷ
+ˇ
+` ErYt ´ Yg´1 |X, S “ gc , Q “ 1s ´ ErYt ´ Yg´1 |X, S “ gc , Q “ 0sˇˇS “ g, Q “ 1
+„
+“ ErYt ´ Yg´1 |S “ g, Q “ 1s ´ E mYS“g,Q“0
+pXq
+t ´Yg´1
+ˇ
+ȷ
+ˇ
+S“gc ,Q“1
+S“gc ,Q“0
+` mYt ´Yg´1 pXq ´ mYt ´Yg´1 pXqˇˇS “ g, Q “ 1
+”
+ı
+S“gc ,Q“1
+S“gc ,Q“0
+“ E Yt ´ Yg´1 ´ mS“g,Q“0
+pXq
+´
+m
+pXq
+`
+m
+pXq|S
+“
+g,
+Q
+“
+1
+Yt ´Yg´1
+Yt ´Yg´1
+Yt ´Yg´1
+”
+´
+¯ı
+S“g,Q“1
+S“gc ,Q“1
+S“gc ,Q“0
+“ E wtrt
+pS, Qq Yt ´ Yg´1 ´ mYS“g,Q“0
+pXq
+´
+m
+pXq
+`
+m
+pXq
+Yt ´Yg´1
+Yt ´Yg´1
+t ´Yg´1
+Hence, we have established that AT T pg, tq “ AT Tra,gc pg, tq. Our next objective is to demonstrate the equality AT T pg, tq “ AT T ipw,gc pg, tq. Specifically, we aim to prove that
+ErwgS“g,Q“1
+pS, Q, Xq ¨ pYt ´ Yg´1 qs “
+1 ,q 1
+
+Er1tS “ g, Q “ 1u ¨ ErYt ´ Yg´1 |X, S “ g 1 , Q “ q 1 ss
+.
+Er1tS “ g, Q “ 1us
+
+By LIE and conditional probabilities, we observe that
+«
+E
+
+pXq
+1tS “ g 1 , Q “ q 1 u ¨ pS“q,Q“1
+g 1 ,q 1
+pXq
+1 ´ pS“q,Q“1
+g 1 ,q 1
+
+ff
+¨ pYt ´ Yg´1 q
+
+„
+
+ȷ
+Er1tS “ g, Q “ 1u|Xs ¨ 1tS “ g 1 , Q “ q 1 u
+“E
+¨ pYt ´ Yg´1 q
+Er1tS “ g 1 , Q “ q 1 u|Xs
+ȷ
+„
+‰
+Er1tS “ g, Q “ 1u|Xs “
+1
+1
+E 1tS “ g , Q “ q u ¨ pYt ´ Yg´1 q|X
+“E
+Er1tS “ g 1 , Q “ q 1 u|Xs
+“
+“
+‰‰
+“ E Er1tS “ g, Q “ 1u|Xs ¨ E pYt ´ Yg´1 q|X, S “ g 1 , Q “ q 1
+“
+“
+‰‰
+“ E 1tS “ g, Q “ 1u ¨ E pYt ´ Yg´1 q|X, S “ g 1 , Q “ q 1
+
+(A.7)
+
+Given that
+«
+ff
+„
+ȷ
+1tS “ g 1 , Q “ q 1 u ¨ pS“q,Q“1
+pXq
+Er1tS “ g, Q “ 1u|Xs ¨ 1tS “ g 1 , Q “ q 1 u
+g 1 ,q 1
+“E
+E
+Er1tS “ g 1 , Q “ q 1 u|Xs
+1 ´ pS“q,Q“1
+pXq
+g 1 ,q 1
+„
+ȷ
+Er1tS “ g, Q “ 1u|Xs ¨ Er1tS “ g 1 , Q “ q 1 u|Xs
+“E
+Er1tS “ g 1 , Q “ q 1 u|Xs
+“ E rEr1tS “ g, Q “ 1u|Xss
+“ Er1tS “ g, Q “ 1us.
+
+OA - 7
+
+(A.8)
+
+Combining (A.7) and (A.8)
+ErwgS“g,Q“1
+pS, Q, Xq ¨ pYt ´ Yg´1 qs “
+1 ,q 1
+
+E r1tS “ g, Q “ 1u ¨ E rpYt ´ Yg´1 q|X, S “ g 1 , Q “ q 1 ss
+Er1tS “ g, Q “ 1us
+
+“ E rErYt ´ Yg´1 |X, S “ g 1 , Q “ q 1 s|S “ g, Q “ 1s
+Thus, analogous reasoning as in RA demonstrates that AT T pg, tq “ AT T ipw,gc pg, tq. Finally,
+we need to show that AT T pg, tq “ AT Tdr,gc pg, tq.
+AT T dr,gc pg, tq
+”´
+¯´
+¯ı
+S“g,Q“1
+S“g,Q“1
+“ E wtrt
+pS, Qq ´ wg,0
+pS, Q, Xq Yt ´ Yg´1 ´ mS“g,Q“0
+Yt ´Yg´1 pXq
+”´
+¯´
+¯ı
+S“g,Q“1
+S“gc ,Q“1
+` E wtrt
+pS, Qq ´ wgS“g,Q“1
+pS,
+Q,
+Xq
+Y
+´
+Y
+´
+m
+pXq
+t
+g´1
+,1
+Yt ´Yg´1
+c
+”´
+¯´
+¯ı
+S“g,Q“1
+S“g,Q“1
+S“gc ,Q“0
+´ E wtrt
+pS, Qq ´ wgc ,0
+pS, Q, Xq Yt ´ Yg´1 ´ mYt ´Yg´1 pXq
+”´
+¯
+ı
+S“g,Q“1
+S“g,Q“1
+“ E wtrt
+pS, Qq ´ wg,0
+pS, Q, Xq pYt ´ Yg´1 q
+”´
+¯
+ı
+S“g,Q“1
+pY
+q
+´
+Y
+` E wtrt
+pS, Qq ´ wgS“g,Q“1
+pS,
+Q,
+Xq
+t
+g´1
+c ,1
+”´
+¯
+ı
+S“g,Q“1
+S“g,Q“1
+´ E wtrt
+pS, Qq ´ wgc ,0
+pS, Q, Xq pYt ´ Yg´1 q
+”´
+¯
+ı
+S“g,Q“1
+S“g,Q“1
+´ E wtrt
+pS, Qq ´ wg,0
+pS, Q, Xq mS“g,Q“0
+pXq
+Yt ´Yg´1
+”´
+¯
+ı
+S“g,Q“1
+S“g,Q“1
+S“gc ,Q“1
+´ E wtrt
+pS, Qq ´ wg,0
+pS, Q, Xq mYt ´Yg´1 pXq
+”´
+¯
+ı
+S“g,Q“1
+S“g,Q“1
+c ,Q“0
+` E wtrt
+pS, Qq ´ wg,0
+pS, Q, Xq mS“g
+pXq
+Yt ´Yg´1
+”´
+¯
+ı
+S“g,Q“1
+S“g,Q“1
+“ E wtrt
+pS, Qq ´ wg,0
+pS, Q, Xq pYt ´ Yg´1 q
+”´
+¯
+ı
+S“g,Q“1
+pY
+q
+´
+Y
+´ E wgS“g,Q“1
+pS,
+Q,
+Xq
+´
+w
+pS,
+Q,
+Xq
+t
+g´1
+gc ,0
+c ,1
+”´
+¯
+ı
+S“g,Q“1
+S“g,Q“1
+´ E wtrt
+pS, Qq ´ wg,0
+pS, Q, Xq mS“g,Q“0
+Yt ´Yg´1 pXq
+”´
+¯
+ı
+S“g,Q“1
+S“g,Q“1
+c ,Q“1
+´ E wtrt
+pS, Qq ´ wg,0
+pS, Q, Xq mS“g
+pXq
+Yt ´Yg´1
+”´
+¯
+ı
+S“g,Q“1
+S“g,Q“1
+S“gc ,Q“0
+` E wtrt
+pS, Qq ´ wg,0
+pS, Q, Xq mYt ´Yg´1 pXq
+“ AT T pg, tq
+„ˆ
+˙
+ȷ
+1tS “ g, Q “ 0u Er1tS “ g, Q “ 1u|Xs
+1
+E 1tS “ g, Q “ 1u ´
+mS“g,Q“0
+pXq
+Yt ´Yg´1
+Er1tS “ g, Q “ 1us
+Er1tS “ g, Q “ 0u|Xs
+„ˆ
+˙
+ȷ
+1
+1tS “ gc , Q “ 1u Er1tS “ g, Q “ 1u|Xs
+c ,Q“1
+´
+E 1tS “ g, Q “ 1u ´
+mS“g
+pXq
+Yt ´Yg´1
+Er1tS “ g, Q “ 1us
+Er1tS “ gc , Q “ 1u|Xs
+„ˆ
+˙
+ȷ
+1
+1tS “ gc , Q “ 0u Er1tS “ g, Q “ 1u|Xs
+c ,Q“0
+`
+E 1tS “ g, Q “ 1u ´
+mS“g
+pXq
+Yt ´Yg´1
+Er1tS “ g, Q “ 1us
+Er1tS “ gc , Q “ 0u|Xs
+”
+ı
+1
+“ AT T pg, tq ´
+E pEr1tS “ g, Q “ 1u|Xs ´ Er1tS “ g, Q “ 1u|Xsq ¨ mS“g,Q“0
+pXq
+Yt ´Yg´1
+Er1tS “ g, Q “ 1us
+”
+ı
+1
+c ,Q“1
+E pEr1tS “ g, Q “ 1u|Xs ´ Er1tS “ g, Q “ 1u|Xsq ¨ mS“g
+´
+Yt ´Yg´1 pXq
+Er1tS “ g, Q “ 1us
+ı
+”
+1
+c ,Q“0
+E pEr1tS “ g, Q “ 1u|Xs ´ Er1tS “ g, Q “ 1u|Xsq ¨ mS“g
+`
+Yt ´Yg´1 pXq
+Er1tS “ g, Q “ 1us
+´
+
+“ AT T pg, tq,
+
+OA - 8
+
+The second and third equalities result from straightforward algebraic manipulations. The
+fourth equality derives from AT T pg, tq “ AT T ipw,gc pg, tq and references equations (A.7) and
+(A.8). The fifth equality is a consequence of the LIE. This concludes the proof.
+Proof of Corollary 4.1
+Proof. Based on results from Theorem 4.1, it is established that for any g P Gtrt and t P
+t2, . . . , T u where t ě g, and for gc P S such that gc ą t, the following holds: AT T pg, tq “
+AT Tdr,gc pg, tq. Multiplying both sides of the previous expression by an arbitrary weight wgg,t
+c
+and summing over all admissible comparison groups gives
+ÿ
+ÿ
+wgg,t
+AT T pg, tq “
+wgg,t
+AT Tdr,gc pg, tq
+c
+c
+gc PGcg,t
+
+gc PGcg,t
+
+AT T pg, tq
+
+ÿ
+
+wgg,t
+“
+c
+
+g,t
+
+gc PGc
+loooomoooon
+
+ÿ
+
+wgg,t
+AT Tdr,gc pg, tq
+c
+
+gc PGcg,t
+
+“1
+
+AT T pg, tq “
+
+ÿ
+
+wgg,t
+AT Tdr,gc pg, tq.
+c
+
+gc PGcg,t
+
+The left-hand side of the second equality simplifies because AT T pg, tq does not depend on
+gc ; allowing us to take it outside the summation. Since the weights sum to one, the desired
+result is obtained.
+Proof of Theorem 4.2
+z
+Proof. For the case of AT
+T dr,gc pg, tq, Theorem 4.1 establishes that AT T pg, tq is point-identified
+for all g P Gtrt , t P t2, . . . , T u, and gc P Gcg,t such that t ě g. Additionally, we observe that
+z
+AT
+T dr,gc pg, tq is comprised of a function
+involving three DR¯ DiDs. Therefore, the asymp? ´z
+totic linear representation of n AT T dr,gc pg, tq ´ AT T pg, tq follows from Theorem A.1(a)
+in Sant’Anna and Zhao (2020). This is due to the fact that ψgg,t
+pWi ; κg,t
+0,gc q is a weighted sum of
+c
+the influence functions for each DR DiD, with weights reflecting the number of units in each
+of them. The asymptotic normality follows from the Lindeberg-Lévy central limit theorem.
+z
+According to Corollary 4.1, the estimator AT
+T dr,gmm pg, tq implies that AT T pg, tq is overg,t
+identified. This means that different gc P Gc can be used, and any weighted sum of these
+estimands will identify our parameter of interest. For each comparison group gc , the estimator
+z
+z
+AT
+T dr,gc pg, tq is determined by a function involving three DR DiD terms, and AT
+T dr,gmm pg, tq
+is then a weighted sum of these terms. Consequently, its asymptotic linear representation,
+as established in Theorem A.1(a) from Sant’Anna and Zhao (2020), is rescaled by the factor
+1 ´1
+11 Ω´1
+g,t {1 Ωg,t 1. This adjustment reflects the incorporation of the kg,t ˆ 1 vector comprising all
+
+OA - 9
+
+RIFdr,gc pg, tq for every gc P Gcg,t , given that ErIFdr pg, tqs “ 0. As before, asymptotic normality
+follows from an implementation of the Lindeberg-Lévy central limit theorem.
+`
+˘´1
+To demonstrate that Ωg,t,gmm “ 11 Ω´1
+ď Ωg,t,gc for any gc P Gcg,t , we can reformulate
+g,t 1
+our minimum variance problem into a GMM problem. This involves a vector of moment
+conditions represented as ErRIFdr pg, tq ´ θg,t s “ 0. Under the conventional regularity conditions that underpin GMM theory (Newey and McFadden, 1994), the asymptotic variance
+associated with any set of weights w is expressed as:
+Ωg,t,w “ p11 W 1q´1 11 W Ωg,t W 1p11 W 1q´1
+where W denotes any positive definite weight matrix. According to Efficient GMM theory,
+` 1 ´1 ˘´1
+choosing W “ Ω´1
+.
+g,t minimizes the asymptotic variance, leading to Ωg,t,gmm “ 1 Ωg,t 1
+More generally, for any W ą 0, we have:
+`
+˘´1
+p11 W 1q´1 11 W Ωg,t W 1p11 W 1q´1 ´ 11 Ω´1
+ą0
+g,t 1
+Consequently, it follows that Ωg,t,gmm ď Ωg,t,w .
+Proof of Corollary 4.2
+ř
+Proof. The population event-study parameter is defined by ESpeq “ gPGtrt PpG “ g|G ` e P
+r1, T sq ¨ AT T pg, g ` eq and its sample analogue is provided by Equation (4.13). By adding
+z
+and subtracting the term PpG “ g|G ` e P r1, T sq ¨ AT
+T dr,gmm pg, tq, followed by multiplying
+?
+the bias term by n, we get the following expression
+¯
+? ´
+x
+n ES dr,gmm peq ´ ESpeq
+´
+¯
+? ÿ
+z
+“ n
+PpG “ g|G ` e P r1, T sq ¨ AT
+T dr,gmm pg, tq ´ AT T pg, tq
+gPGtrt
+
+`
+
+? ÿ
+pPn pG “ g|G ` e P r1, T sq ´ PpG “ g|G ` e P r1, T sqq ¨ AT T pg, tq ` op p1q.
+n
+gPGtrt
+
+? z
+Given the asymptotic linear representation of both npAT
+T dr,gmm pg, tq ´ AT T pg, tqq and
+?
+npPn pG “ g|G ` e P r1, T sq ´ PpG “ g|G ` e P r1, T sqq as stated in Theorem 4.2 and
+Equation (4.19), respectively, we can substitute these expressions into the representation
+above and arrange the summation over i “ 1, . . . , n to obtain
+¯
+? ´
+ydr,gmm peq ´ ESpeq
+n ES
+n
+˘ı
+11 Ω´1
+1 ÿ” ÿ `
+g,t
+g,e
+“?
+PpG “ g|G ` e P r1, T sq ¨ 1 ´1 ψ g,t pWi ; κg,t
+q
+`
+ξ
+pW
+q
+¨
+AT
+T
+pg,
+tq
+`op p1q.
+i
+0
+n i“1 gPG
+1 Ωg,t 1
+trt
+looooooooooooooooooooooooooooooooooooooooooooooooooooooomooooooooooooooooooooooooooooooooooooooooooooooooooooooon
+es,e
+lgmm
+pWi q
+
+As before, asymptotic normality is established through the Lindeberg-Lévy central limit
+theorem. This concludes the proof.
+OA - 10
+
+B
+
+Additional Details about Monte Carlo Simulations
+
+This section provides additional details about the Monte Carlo designs discussed in the main
+text.
+
+B.1
+
+More details on two-period DDD setup with covariates
+
+As discussed in Section 5.1, we considered a two-period DDD setup with covariates where,
+for a generic four-dimensional vector O, the conditional probability of each unit belonging to
+a subgroup pg, qq P t2, 8u ˆ t0, 1u is
+PrS “ g, Q “ q|Os “ p
+
+S“g,Q“q
+
+ps
+exppfS“g,Q“q
+pOqq
+pOq “ ř
+,
+ps
+pg,qqPSdes-1 ˆt0,1u exppfS“g,Q“q pOqq
+
+(B.1)
+
+ps
+such that, for each pg, qq P Sdes-1 ˆ t0, 1u, we define the linear process fS“g
+pOq “ cO1 γgc ,q ,
+c ,Q“q
+where c is a scalar that guarantees reasonable overlap, and γgc ,q is a 4ˆ1 vector of coefficients
+for each variable in O given by
+¨
+˛
+¨
+˛
+¨
+˛
+$
+´1
+´0.5
+3
+’
+’
+0.2, if S “ 8, Q “ 0
+˚
+‹
+˚
+‹
+˚
+’
+‹
+&
+˚ 0.5 ‹
+˚ 2 ‹
+˚´1.5‹
+‹
+˚
+‹
+˚
+‹
+γ8,0 “ ˚
+˚´0.25‹ ; γ8,1 “ ˚ 0.5 ‹ ; γ2,0 “ ˚ 0.75 ‹ ; and c “ ’0.2, if S “ 8, Q “ 1
+’
+˝
+‚
+˝
+‚
+˝
+‚
+’
+%0.05, if S “ 2, Q “ 0
+´0.1
+´0.2
+´0.3
+␣
+In this design, the probabilities for each subgroup are denoted as pS“2,Q“0 pOq, pS“2,Q“1 pOq,
+(
+pS“8,Q“0 pOq, pS“8,Q“1 pOq , and their sum is equal to one. Define the random variable
+U „ Uniformr0, 1s. The assignment process to each group is defined as in (5.2).
+The potential outcomes are defined as in (5.3). We define f reg pO, Sq as
+reg
+reg
+f reg pO, Sq “ 1tSi “ 2u ¨ fS“2
+pOq ` 1tSi “ 8u ¨ fS“8
+pOq,
+reg
+with fS“g
+pOq “ α ` O1 βg , with α “ 2010, β2 “ p27.4, 13.7, 13.7, 13.7q1 and β8 “ 0.5β2 . We
+define the unobserved heterogeneity term νi pOi , Si , Qi q as
+d
+
+reg
+reg
+νi pOi , Si , Qi q „ N p1tSi “ 2uQi fS“2
+pOi q ` 1tSi “ 8uQi fS“8
+pOi q, 1q.
+
+Finally, as discussed in our main text, we allow misspecification of propensity score and/or
+outcome regression models. In all four DGPs, the observed data is Wi “ tYi,1 , Yi,2 , Si , Qi , Xi uni“1 ,
+d
+where the covariates Xi are generated as follows. Let Zi “ pZi,1 , Zi,2 , Zi,3 , Zi,4 q1 „ N p0, I4 q.
+The observed vector of
+covariates Xi “ pXi,1 , Xi,2 , Xi,3 , Xi,4 q1 where for every k “ 1, ¨ ¨ ¨ , 4,
+Mb
+VarpX̃k q such that
+Xk “ pX̃k ´ ErX̃k sq
+X̃1 “ exp p0.5Z1 q ,
+
+OA - 11
+
+L
+X̃2 “ 10 ` Z2 p1 ` exp pZ1 qq ,
+X̃3 “ p0.6 ` Z1 Z3 {25q3 ,
+X̃4 “ p20 ` Z1 ` Z4 q2 .
+These transformations build on Kang and Schafer (2007) and Sant’Anna and Zhao (2020).
+We consider four different DGPs depending on whether the propensity score and/or the
+outcome regressions are misspecified. The specifics are outlined below:
+reg
+ps
+– DGP 1 : All nuisance functions depend on X, namely fS“g
+pXq and fS“g,Q“q
+pXq. All
+working models are correctly specified in this DGP, as X is observed in the data.
+reg
+– DGP 2 : Regression models depend on X, fS“g
+pXq, and the propensity score depends
+ps
+on Z fS“g,Q“q pZq. The working model for propensity score is misspecified, whereas the
+working models for the outcomes are correctly specified.
+reg
+– DGP 3 : Regression models depend on Z, fS“g
+pZq, and propensity score depends on
+ps
+X, fS“g,Q“q
+pXq. The working model for propensity score is correctly specifies, whereas
+the working models for the outcomes are misspecified.
+reg
+ps
+– DGP 4 : All nuisances functions depend on Z, namely fS“g
+pZq and fS“g,Q“q
+pZq. All
+working models are misspecified.
+
+We graphically illustrate the results in Figure 3 when n “ 5, 000. The following table
+presents the traditional summary statistics for the Monte Carlo involving average bias, root
+mean square error (RMSE), empirical 95% coverage probability, and the average length of
+a 95% confidence interval under 1,000 Monte Carlo repetitions. We report these results for
+n “ 1, 000, n “ 5, 000, and n “ 10, 000. These results are self-explanatory.
+
+B.2
+
+More details on staggered DDD setups
+
+We now provide more details about the simulation designs for staggered DDD as discussed in
+Section 5.2. The potential outcomes are as defined in (5.4) with the unobserved heterogeneity
+term νi pSi , Qi q being defined as
+d
+
+νi pSi , Qi q „ N p1tSi “ 2up2 ` Qi qα ` 1tSi “ 2up2 ` Qi qα ` 1tSi “ 8uQi α, 1q,
+
+(B.2)
+
+where α “ 278.5. All the other relevant information is described in Section 5.2.
+As we summarize the simulation results in Section 5.2 via graphs, below we present a
+more traditional summary of our simulation results using a table. We stress that, in period
+3, all the considered DDD estimators coincide as there is only one possible comparison group
+
+OA - 12
+
+OA - 13
+
+0.001
+-9.248
+-2.686
+1.153
+
+DRDDD
+3WFE
+DRDID-DIF
+M-3WFE
+
+0.058
+9.349
+2.759
+1.226
+
+0.083
+9.291
+2.782
+1.293
+
+0.188
+10.301
+3.361
+1.809
+
+RMSE
+
+0.954
+0.000
+0.010
+0.223
+
+0.944
+0.022
+0.203
+0.532
+
+0.953
+0.674
+0.762
+0.855
+
+Cov. 95
+
+Bias
+
+0.229
+7.106
+2.568
+1.667
+
+0.324
+10.055
+3.635
+2.358
+
+0.002
+-7.970
+-2.295
+0.829
+
+0.000
+-7.929
+-2.270
+0.847
+
+0.732 -0.008
+22.431 -8.038
+8.100 -2.302
+5.275 0.865
+
+ALCI
+
+0.060
+8.091
+2.381
+0.935
+
+0.084
+8.156
+2.442
+1.050
+
+0.185
+9.090
+3.016
+1.621
+
+RMSE
+
+0.942
+0.001
+0.036
+0.520
+
+0.951
+0.069
+0.283
+0.708
+
+0.944
+0.780
+0.798
+0.903
+
+Cov. 95
+
+DGP 2
+Bias
+
+0.228
+7.119
+2.489
+1.688
+
+-0.008
+-5.108
+-1.405
+1.138
+
+n “ 10000
+
+0.323 -0.014
+10.065 -5.049
+3.520 -1.372
+2.387 1.137
+
+n “ 5000
+
+0.729 0.032
+22.426 -4.985
+7.862 -1.280
+5.331 1.188
+
+n “ 1000
+
+ALCI
+
+0.495
+5.231
+1.556
+1.272
+
+0.746
+5.324
+1.706
+1.419
+
+1.606
+6.160
+2.515
+2.219
+
+RMSE
+
+0.944
+0.146
+0.480
+0.499
+
+0.939
+0.601
+0.698
+0.710
+
+0.952
+0.977
+0.911
+0.898
+
+Cov. 95
+
+DGP 3
+Bias
+
+1.973
+7.870
+2.716
+2.267
+
+-2.013
+-7.597
+-3.339
+-0.957
+
+2.794 -2.019
+11.125 -7.563
+3.832 -3.326
+3.206 -0.985
+
+6.310 -2.072
+24.794 -7.755
+8.514 -3.402
+7.177 -1.076
+
+ALCI
+
+2.078
+7.677
+3.404
+1.127
+
+2.141
+7.733
+3.463
+1.284
+
+2.629
+8.574
+4.054
+2.185
+
+RMSE
+
+0.024
+0.000
+0.001
+0.619
+
+0.190
+0.101
+0.064
+0.777
+
+0.747
+0.894
+0.628
+0.900
+
+Cov. 95
+
+DGP 4
+
+1.973
+7.852
+2.660
+2.260
+
+2.792
+11.097
+3.755
+3.197
+
+6.304
+24.714
+8.332
+7.161
+
+ALCI
+
+Notes: This table summarizes the Monte Carlo experiments for four distinct DGPs as discussed in Section 5.1. The DRDDD row includes our proposed
+doubly robust estimators with gc “ 8. The 3WFE and M-3WFE rows display OLS estimates for 3WFE models in equations (3.3) and (3.4). The
+DRDID-DIF row shows the difference between two Doubly Robust DiDs. Columns represent average bias, RMSE, coverage probability at 95% (Cov.
+95), and average confidence interval length (ALCI) for each estimator. The 95% confidence intervals use point-wise asymptotic critical values. Results
+span sample sizes n “ t1,000, 5,000, 10,000u over 1,000 simulations, with the true AT T p2, 2q being zero.
+
+-0.002
+-9.059
+-2.616
+1.154
+
+-0.003
+-9.298
+-2.681
+1.192
+
+DRDDD
+3WFE
+DRDID-DIF
+M-3WFE
+
+DRDDD
+3WFE
+DRDID-DIF
+M-3WFE
+
+Bias
+
+Estimator
+
+DGP 1
+
+Table OA-1: Monte Carlo results for AT T p2, 2q in DGP 1 – DGP 4, with two periods and covariates
+
+at that time period, the never-enabling units. This explains the results for AT T p2, 3q and
+AT T p3, 3q in Table OA-2. The AT T p2, 2q results are self-explanatory and highlight that
+(a) proceeding as if DDD is just the difference between two DiD procedures can lead to
+misleading conclusions, (b) using our proposed DDD estimators bypasses these limitations,
+and (c) the gains in precision of using our optimally weighted estimator can be large.
+Table OA-2: Monte Carlo results for Staggered DDD without covariates
+AT T p2, 2q
+Estimator
+
+Bias
+
+RMSE
+
+Cov. 95
+
+AT T p2, 3q
+ALCI
+
+Bias
+
+RMSE
+
+Cov. 95
+
+AT T p3, 3q
+ALCI
+
+Bias
+
+RMSE
+
+Cov. 95
+
+ALCI
+
+1.140
+1.140
+1.140
+
+-0.007
+-0.007
+-0.007
+
+0.286
+0.286
+0.286
+
+0.941
+0.941
+0.941
+
+1.083
+1.083
+1.083
+
+0.511
+0.511
+0.511
+
+0.001
+0.001
+0.001
+
+0.127
+0.127
+0.127
+
+0.935
+0.935
+0.935
+
+0.487
+0.487
+0.487
+
+0.361
+0.361
+0.361
+
+-0.001
+-0.001
+-0.001
+
+0.090
+0.090
+0.090
+
+0.941
+0.941
+0.941
+
+0.344
+0.344
+0.344
+
+n “ 1000
+DDDgmm
+DDDnev
+DDDcs´nyt
+
+-0.003
+-0.001
+-15.815
+
+0.192
+0.287
+16.034
+
+0.956
+0.947
+0.000
+
+0.748
+1.131
+10.833
+
+-0.004
+-0.004
+-0.004
+
+0.298
+0.298
+0.298
+
+0.947
+0.947
+0.947
+
+n “ 5000
+DDDgmm
+DDDnev
+DDDcs´nyt
+
+-0.009
+-0.012
+-15.875
+
+0.086
+0.135
+15.919
+
+0.950
+0.932
+0.000
+
+0.335
+0.507
+4.845
+
+-0.007
+-0.007
+-0.007
+
+0.134
+0.134
+0.134
+
+0.938
+0.938
+0.938
+
+n “ 10000
+DDDgmm
+DDDnev
+DDDcs´nyt
+
+0.001
+0.000
+-15.897
+
+0.062
+0.094
+15.918
+
+0.941
+0.941
+0.000
+
+0.237
+0.359
+3.428
+
+0.001
+0.001
+0.001
+
+0.097
+0.097
+0.097
+
+0.940
+0.940
+0.940
+
+Notes: This table summarizes the Monte Carlo experiments for the DGP as discussed in Section 5.2. DDDnev
+denotes our DDD estimator with gc “ 8 from Equation (4.1). DDDgmm is our proposed DDD estimator from
+Equation (4.12). DDDcs´nyt is the estimator pooling all not-yet-treated units as defined in (3.6). Columns
+represent average bias, RMSE, coverage probability at 95% (Cov. 95), and average confidence interval length
+(ALCI) for each estimator. The 95% confidence intervals use point-wise asymptotic critical values. Results span
+sample sizes n “ t1,000, 5,000, 10,000u over 1,000 simulations, with the true AT T p2, 2q “ 10, AT T p2, 3q “ 20,
+and AT T p3, 3q “ 25.
+
+B.3
+
+Staggered DDD setups with covariates
+
+In this section, we expand on the DGP mentioned in Section 5.2 by incorporating covariates
+into the analysis. Similar to before, there are three time periods t “ 1, 2, 3, three enabling
+groups S P t2, 3, 8u, and two eligibility groups Q P t0, 1u.
+ps
+Without loss of generality, we define fS“g,Q“q
+pW q “ cq W J γg , @pg, qq P Sdes´2 ˆ t0, 1u,
+where cq is a scalar controlling the overlap condition on the propensity scores, and γg is a
+4 ˆ 1 vector of coefficients for each variable in W . For an arbitrary four-dimensional vector
+O, the conditional probability of each unit belonging to a subgroup pg, qq P Sdes´2 ˆ t0, 1u is
+
+PrG “ g, Q “ q | Os “ p
+
+S“g,Q“q
+
+ps
+exppfS“g,Q“q
+pOqq
+pOq “ ř
+ps
+pg,qqPSdes´2 ˆt0,1u exppfS“g,Q“q pOqq
+
+OA - 14
+
+(B.3)
+
+Then, we set cq “ 0.4 if Q “ 0, cq “ ´0.4 if Q “ 1 and,
+¨
+˛
+¨
+˛
+¨
+˛
+´1
+´0.5
+´0.25
+˚
+‹
+˚
+‹
+˚
+‹
+˚ 0.5 ‹
+˚ 1 ‹
+˚ 0.1 ‹
+˚
+‹
+˚
+‹
+˚
+‹
+γ2 “ ˚
+‹ ; γ3 “ ˚ ´0.1 ‹ ; γ8 “ ˚ ´1 ‹
+´0.25
+˝
+‚
+˝
+‚
+˝
+‚
+´0.1
+´0.25
+´0.1
+␣
+In this design, the probabilities for each subgroup are denoted as pS“2,Q“0 pOq, pS“2,Q“1 pOq,
+(
+pS“3,Q“0 pV q, pS“3,Q“1 pOq, pS“8,Q“0 pOq, pS“8,Q“1 pOq , which sum to one. Define the random
+variable U „ Uniformr0, 1s. The assignment process to each group is determined as follows:
+$
+’
+’
+p8, 0q, if U ď pS“8,Q“0 pOq,
+’
+’
+’
+ř
+’
+’
+’
+p8, 1q, if U ď 1j“0 pS“8,Q“j pOq,
+’
+’
+’
+ř
+’
+&p2, 0q,
+if U ď 1j“0 pS“8,Q“j pOq ` pS“2,Q“0 pV q,
+(B.4)
+pS, Qq :“
+ř1
+ř1
+S“2,Q“j
+S“8,Q“j
+’
+’
+p
+pOq,
+p
+pOq
+`
+p2,
+1q,
+if
+U
+ď
+’
+j“0
+j“0
+’
+’
+ř
+ř
+’
+1
+1
+’
+’
+p3, 0q,
+if U ď j“0 pS“8,Q“j pOq ` j“0 pS“2,Q“j pOq ` pS“3,Q“0 pOq,
+’
+’
+’
+ř
+ř
+’
+%p3, 1q,
+if 1j“0 pS“8,Q“j pOq ` 1j“0 pS“2,Q“j pOq ` pS“3,Q“0 pOq ă U.
+Next, we define the outcome regression component of our DGP. In this model, covariates
+O enter the working model linearly. Let f reg pOi q “ α`O1 β, where α is a scalar and β is a 4ˆ1
+vector of coefficients for each variable in O. We set α “ 210 and β “ p27.4, 13.7, 13.7, 13.7q1 .
+The untreated potential outcomes (which are observed for all units) at period t “ 1 are
+defined as follows:
+Yi,1 p8q “ p1 ` Qi q ¨ f reg pOi q ` νi pOi , Si , Qi q ` εi,1 p8q
+where νi pOi , Si , Qi q denotes a time-invariant unobserved heterogeneity with νi pOi , Si , Qi q „
+N pMi ¨ f reg pOi q ` Qi ¨ f reg pOi q, 1q where Mi “ Si if Si P Gtrt , zero otherwise, and εi,1 p8q „
+N p0, 1q. Subsequently, we generate the potential outcomes at period t “ 2 for each g P G:
+Yi,2 p8q “ p2 ` Qi qf reg pOi q ` 2νi pOi , Si , Qi q ` εi,2 p8q
+Yi,2 p2q “ p2 ` Qi qf reg pOi q ` 2νi pOi , Si , Qi q ` Qi ¨ AT T p2, 2q ` εi,2 p2q
+Yi,2 p3q “ p2 ` Qi qf reg pOi q ` 2νi pOi , Si , Qi q ` εi,2 p3q
+where εi,2 p¨q „ N p0, 1q. The realized outcomes at t “ 2 are given by
+ÿ
+Yi,2 “
+1tGi “ guYi,2 pgq
+gPG
+
+Then, we generate the potential outcomes in the period t “ 3 for each g P G:
+Yi,3 p8q “ p3 ` Qi qf reg pOi q ` 3νi pOi , Si , Qi q ` εi,3 p8q
+OA - 15
+
+Yi,3 p2q “ p3 ` Qi qf reg pOi q ` 3νi pOi , Si , Qi q ` Qi ¨ AT T p2, 3q ` εi,3 p2q
+Yi,3 p3q “ p3 ` Qi qf reg pOi q ` 3νi pOi , Si , Qi q ` Qi ¨ AT T p3, 3q ` εi,3 p3q
+where εi,3 p¨q „ N p0, 1q. The realized outcomes at t “ 3 are given by
+ÿ
+Yi,3 “
+1tGi “ guYi,3 pgq
+gPG
+
+Finally, we set AT T p2, 2q “ 10, AT T p2, 3q “ 20 and AT T p3, 3q “ 25. Given that we
+account for potential misspecification of nuisance functions, we can proceed as outlined in
+Section B.1. The observed data is Wi “ tYi,1 , Yi,2 , Yi,3 , Si , Qi , Xi uni“1 , where covariates Xi and
+Zi are generated in the same manner as described in Section B.1. Depending on whether
+the propensity score and/or outcome regression are misspecified, these specifications will
+result in four distinct DGPs. Table OA-3 presents summary statistics from 1,000 Monte
+Carlo experiments, which include average bias, root mean squared error (RMSE), coverage
+probability at 95%, and average confidence interval length. We provide these statistics for the
+AT T p2, 2q under the design mentioned in the current section with sample sizes n “ 1, 000,
+n “ 5, 000, and n “ 10, 000. Results for AT T p2, 3q and AT T p3, 3q are omitted to save space,
+as they produce similar patterns. These results clearly illustrate the effectiveness of our
+proposed estimator and align with findings from the previous sections.
+
+OA - 16
+
+OA - 17
+
+-0.001
+-0.004
+-8.928
+-3.770
+
+DRDDDgmm
+DRDDDnev
+DRDDDcs´nyt
+DRCS-DIF
+
+0.073
+0.091
+8.965
+3.861
+
+0.106
+0.131
+9.028
+3.983
+
+0.236
+0.298
+9.294
+4.668
+
+RMSE
+
+0.955
+0.956
+0.000
+0.004
+
+0.947
+0.949
+0.000
+0.108
+
+0.943
+0.939
+0.079
+0.704
+
+Cov. 95
+
+0.289
+0.359
+3.226
+3.221
+
+0.407
+0.507
+4.557
+4.566
+
+0.901
+1.137
+10.298
+10.348
+
+ALCI
+
+-0.004
+-0.004
+-8.111
+-4.347
+
+-0.002
+-0.005
+-8.063
+-4.339
+
+-0.002
+-0.002
+-8.138
+-4.377
+
+Bias
+
+0.073
+0.092
+8.151
+4.415
+
+0.105
+0.131
+8.140
+4.483
+
+0.230
+0.288
+8.546
+5.109
+
+RMSE
+
+0.948
+0.937
+0.000
+0.000
+
+0.935
+0.944
+0.000
+0.024
+
+0.945
+0.937
+0.123
+0.608
+
+Cov. 95
+
+DGP 2
+Bias
+
+-0.175
+-0.367
+-8.962
+-3.919
+
+0.083
+0.012
+-8.636
+-3.844
+
+0.283
+0.351
+3.211
+3.170
+
+0.047
+0.036
+-8.746
+-3.896
+
+n “ 10000
+
+0.399
+0.497
+4.547
+4.479
+
+n “ 5000
+
+0.893
+1.121
+10.280
+10.116
+
+n “ 1000
+
+ALCI
+
+1.021
+1.201
+8.842
+4.051
+
+1.450
+1.746
+8.821
+4.165
+
+3.300
+3.984
+9.891
+5.355
+
+RMSE
+
+0.951
+0.950
+0.000
+0.063
+
+0.953
+0.948
+0.005
+0.333
+
+0.943
+0.937
+0.404
+0.789
+
+Cov. 95
+
+DGP 3
+Bias
+
+4.004
+4.711
+5.090
+4.511
+
+5.629
+6.639
+7.192
+6.356
+
+-1.088
+1.159
+-11.108
+-6.852
+
+-1.170
+1.128
+-11.009
+-6.720
+
+12.396 -1.499
+14.726 0.947
+16.173 -11.244
+14.263 -6.866
+
+ALCI
+
+1.544
+1.658
+11.188
+6.941
+
+1.956
+2.032
+11.173
+6.924
+
+3.765
+3.956
+12.075
+7.767
+
+RMSE
+
+0.820
+0.846
+0.000
+0.000
+
+0.856
+0.900
+0.002
+0.013
+
+0.917
+0.937
+0.232
+0.520
+
+Cov. 95
+
+DGP 4
+
+4.249
+4.666
+5.373
+4.419
+
+5.954
+6.568
+7.576
+6.280
+
+12.722
+14.403
+16.642
+14.161
+
+ALCI
+
+Notes: This table presents the Monte Carlo experiments for the DGPs as detailed in the text. DDDnev denotes our DDD estimator with gc “ 8 from
+Equation (4.1). DDDgmm is our proposed DDD estimator from Equation (4.12). DDDcs´nyt is the estimator pooling all not-yet-treated units as defined
+in (3.6). DRCS-DIF uses the differences between two DiDs following Callaway and Sant’Anna (2021) as described in Remark 4.1. Each column shows
+average bias, RMSE, coverage probability at 95% (Cov. 95), and average confidence interval length (ALCI) for each estimator, using point-wise asymptotic
+critical values for the confidence intervals. The results cover sample sizes n “ t1,000, 5,000, 10,000u over 1,000 simulations, with the true AT T p2, 2q “ 10.
+
+0.006
+0.005
+-8.949
+-3.793
+
+0.009
+0.012
+-8.877
+-3.765
+
+DRDDDgmm
+DRDDDnev
+DRDDDcs´nyt
+DRCS-DIF
+
+DRDDDgmm
+DRDDDnev
+DRDDDcs´nyt
+DRCS-DIF
+
+Bias
+
+Estimator
+
+DGP 1
+
+Table OA-3: Monte Carlo results for AT T p2, 2q in DGP 1 – DGP 4, with multiple periods and covariates
+
+References
+Callaway, Brantly and Pedro HC Sant’Anna, “Difference-in-differences with multiple time
+periods,” Journal of econometrics, 2021, 225 (2), 200–230.
+Chen, Xiaohong, Han Hong, and Alessandro Tarozzi, “Semiparametric efficiency in GMM
+models with auxiliary data,” Annals of Statistics, 2008, 36 (2), 808 – 843. Cited by: 119; All
+Open Access, Bronze Open Access, Green Open Access.
+Hahn, Jinyong, “On the Role of the Propensity Score in Efficient Semiparametric Estimation of
+Average Treatment Effects,” Econometrica, 1998, 66 (2), 315–331.
+Kang, Joseph D. Y. and Joseph L. Schafer, “Demystifying Double Robustness: A Comparison
+of Alternative Strategies for Estimating a Population Mean from Incomplete Data,” Statistical
+Science, 2007, 22 (4), 523 – 539.
+Newey, Whitney K., “Semiparametric efficiency bounds,” Journal of Applied Econometrics, 1990,
+5 (2), 99–135.
+and Daniel McFadden, “Large sample estimation and hypothesis testing,” in “Handbook of
+Econometrics,” Vol. 4, Amsterdam: North-Holland: Elsevier, 1994, chapter 36, pp. 2111–2245.
+Sant’Anna, Pedro H.C. and Jun Zhao, “Doubly Robust Difference-in-Differences Estimators,”
+Journal of Econometrics, 2020, 219 (1), 101–122.
+
+18
+
+

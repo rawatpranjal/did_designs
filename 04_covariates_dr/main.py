@@ -17,7 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from utils import load_lalonde as _load_lalonde
+from utils import load_lalonde as _load_lalonde, COLORS
 
 import pandas as pd
 import numpy as np
@@ -88,7 +88,8 @@ def estimate_propensity_score(df, covariates):
     pscore = model.predict_proba(X_scaled)[:, 1]
 
     # Clip to avoid extreme weights
-    pscore = np.clip(pscore, 0.01, 0.99)
+    # Use 0.999 upper bound since we only weight controls (care about 1-p not being 0)
+    pscore = np.clip(pscore, 0.01, 0.999)
 
     return pscore
 
@@ -327,30 +328,39 @@ Key observations:
     print("[9] Creating Visualizations")
     print("=" * 60)
 
-    # Plot 1: Propensity Score Distribution
+    
+    # Plot 1: Mirrored Propensity Score Histogram (Shows Overlap Problem)
     fig1, ax1 = plt.subplots(figsize=(10, 6))
 
-    ax1.hist(pscore[df['treat'] == 1], bins=30, alpha=0.6, label='Treated',
-             density=True, color='red')
-    ax1.hist(pscore[df['treat'] == 0], bins=30, alpha=0.6, label='Control',
-             density=True, color='blue')
+    # Treated (Top - positive counts)
+    ax1.hist(pscore[df['treat'] == 1], bins=30, alpha=0.7, label='Treated (NSW)',
+             color=COLORS['treat'], edgecolor='black', linewidth=0.5)
 
-    ax1.set_xlabel('Propensity Score', fontsize=12)
-    ax1.set_ylabel('Density', fontsize=12)
-    ax1.set_title('Propensity Score Distribution\n(Overlap is necessary for valid inference)', fontsize=14)
-    ax1.legend()
-    ax1.grid(True, alpha=0.3)
+    # Control (Bottom - inverted for visual effect)
+    counts, bins = np.histogram(pscore[df['treat'] == 0], bins=30)
+    ax1.bar(bins[:-1], -counts, width=np.diff(bins), align='edge',
+            color=COLORS['control'], alpha=0.7, label='Control (PSID)', edgecolor='black', linewidth=0.5)
+
+    ax1.axhline(0, color='black', linewidth=1)
+    ax1.set_xlabel('Propensity Score P(D=1|X)', fontsize=12)
+    ax1.set_ylabel('Count (Inverted for Control)', fontsize=12)
+    ax1.set_title('Propensity Score Overlap: Treated vs Control\n(IPW reweights controls to match treated distribution)', fontsize=14)
+    ax1.legend(loc='upper right')
+
+    # Annotate overlap problem
+    ax1.annotate('Mass of Controls\n(Low Propensity)', xy=(0.08, -80),
+                fontsize=10, ha='center', color=COLORS['text'])
+    ax1.annotate('Limited overlap\nin this region', xy=(0.7, 15),
+                fontsize=10, ha='center', color=COLORS['treat'])
 
     fig1.tight_layout()
-    fig1.savefig(FIGS_DIR / 'propensity_scores.png', dpi=150, bbox_inches='tight')
-    print(f"Saved: {FIGS_DIR / 'propensity_scores.png'}")
+    fig1.savefig(FIGS_DIR / 'pscore_overlap.png', dpi=300, bbox_inches='tight')
+    print(f"Saved: {FIGS_DIR / 'pscore_overlap.png'}")
 
-    # Plot 2: Earnings Trends
+    # Plot 2: Earnings Trends with Ashenfelter Dip Annotation
     fig2, ax2 = plt.subplots(figsize=(10, 6))
 
-    # Create time series
-    times = ['1974\n(Pre)', '1975\n(Pre)', '1978\n(Post)']
-
+    # Calculate means
     treat_means = [df.loc[df['treat']==1, 're74'].mean(),
                    df.loc[df['treat']==1, 're75'].mean(),
                    df.loc[df['treat']==1, 're78'].mean()]
@@ -359,56 +369,81 @@ Key observations:
                   df.loc[df['treat']==0, 're75'].mean(),
                   df.loc[df['treat']==0, 're78'].mean()]
 
-    x = [0, 1, 2]
-    ax2.plot(x, treat_means, 'r-o', linewidth=2, markersize=10, label='Treated (NSW)')
-    ax2.plot(x, ctrl_means, 'b-o', linewidth=2, markersize=10, label='Control')
+    # Use real year spacing for x-axis
+    x_vals = [1974, 1975, 1978]
 
-    # Add counterfactual
-    counterfactual = treat_means[1] + (ctrl_means[2] - ctrl_means[1])
-    ax2.plot([1, 2], [treat_means[1], counterfactual], 'r--',
-             linewidth=2, alpha=0.5, label='Counterfactual')
+    # Plot Treated
+    ax2.plot(x_vals, treat_means, marker='o', markersize=10, linewidth=3,
+             color=COLORS['treat'], label='Treated (NSW)')
 
-    ax2.axvline(x=1.5, color='gray', linestyle='--', label='Treatment')
+    # Plot Control
+    ax2.plot(x_vals, ctrl_means, marker='s', markersize=8, linewidth=2,
+             color=COLORS['control'], linestyle='--', label='Control (PSID)')
 
-    ax2.set_xticks(x)
-    ax2.set_xticklabels(times)
+    # Annotate the Ashenfelter Dip
+    ax2.annotate("Ashenfelter's Dip\n(Pre-treatment drop)",
+                xy=(1975, treat_means[1]), xytext=(1974.3, treat_means[1] - 1500),
+                arrowprops=dict(arrowstyle='->', color=COLORS['treat'], lw=2),
+                color=COLORS['treat'], fontsize=11, fontweight='bold')
+
+    # Treatment line
+    ax2.axvline(x=1976.5, color=COLORS['grid'], linestyle='--', linewidth=2, label='Treatment Period')
+
+    ax2.set_xticks(x_vals)
     ax2.set_xlabel('Year', fontsize=12)
     ax2.set_ylabel('Real Earnings ($)', fontsize=12)
-    ax2.set_title('Earnings Trends: Selection Bias in LaLonde Data\n(Note: Treated have "dipping" pre-trends)', fontsize=14)
-    ax2.legend()
-    ax2.grid(True, alpha=0.3)
+    ax2.set_title('Why Naive DiD Fails: Selection on Trends\n(Treated workers had declining earnings before training)', fontsize=14)
+    ax2.legend(loc='upper left')
+    ax2.grid(True, alpha=0.3, color=COLORS['grid'])
+    
+    # Clean spines
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
 
     fig2.tight_layout()
-    fig2.savefig(FIGS_DIR / 'earnings_trends.png', dpi=150, bbox_inches='tight')
-    print(f"Saved: {FIGS_DIR / 'earnings_trends.png'}")
+    fig2.savefig(FIGS_DIR / 'earnings_trends_dip.png', dpi=300, bbox_inches='tight')
+    print(f"Saved: {FIGS_DIR / 'earnings_trends_dip.png'}")
 
-    # Plot 3: Method Comparison Bar Chart
+    # Plot 3: Method Comparison Bar Chart with Color Coding
     fig3, ax3 = plt.subplots(figsize=(10, 6))
 
     methods = ['Naive DiD', 'IPW', 'Outcome Reg.', 'Doubly Robust']
     estimates = [naive_att, ipw_att, or_att, dr_att]
-    colors = ['gray', 'steelblue', 'forestgreen', 'darkred']
+    # Red for biased, blue for corrected, green for best practice
+    colors = [COLORS['treat'], COLORS['control'], COLORS['control'], '#2ca02c']
 
-    bars = ax3.bar(methods, estimates, color=colors, alpha=0.8, edgecolor='black')
+    bars = ax3.bar(methods, estimates, color=colors, alpha=0.8, edgecolor='black', linewidth=2)
 
     ax3.axhline(y=0, color='black', linewidth=1)
 
     # Add value labels
     for bar, est in zip(bars, estimates):
         height = bar.get_height()
+        offset = 200 if height > 0 else -400
         ax3.annotate(f'${est:,.0f}',
                     xy=(bar.get_x() + bar.get_width()/2, height),
                     xytext=(0, 5 if height > 0 else -15),
                     textcoords='offset points',
-                    ha='center', fontsize=11, fontweight='bold')
+                    ha='center', fontsize=12, fontweight='bold', color=COLORS['text'])
 
     ax3.set_ylabel('ATT Estimate ($)', fontsize=12)
-    ax3.set_title('Comparison of DiD Methods\n(Covariate adjustment corrects selection bias)', fontsize=14)
-    ax3.grid(True, alpha=0.3, axis='y')
+    ax3.set_title('Comparison of DiD Methods\n(Covariate adjustment flips the sign from Negative to Positive)', fontsize=14)
+    ax3.grid(True, alpha=0.3, axis='y', color=COLORS['grid'])
+    
+    # Clean spines
+    ax3.spines['top'].set_visible(False)
+    ax3.spines['right'].set_visible(False)
+
+    # Add legend for color coding
+    from matplotlib.patches import Patch
+    legend_elements = [Patch(facecolor=COLORS['treat'], label='Biased (Wrong Sign)'),
+                       Patch(facecolor=COLORS['control'], label='Covariate-Adjusted'),
+                       Patch(facecolor='#2ca02c', label='Best Practice (DR)')]
+    ax3.legend(handles=legend_elements, loc='lower right')
 
     fig3.tight_layout()
-    fig3.savefig(FIGS_DIR / 'method_comparison.png', dpi=150, bbox_inches='tight')
-    print(f"Saved: {FIGS_DIR / 'method_comparison.png'}")
+    fig3.savefig(FIGS_DIR / 'results_comparison.png', dpi=300, bbox_inches='tight')
+    print(f"Saved: {FIGS_DIR / 'results_comparison.png'}")
 
     # =========================================================================
     # Step 10: Interpretation
