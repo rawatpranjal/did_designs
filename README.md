@@ -19,10 +19,7 @@ $$Y_{it} = \alpha + \beta \text{Treat}_i + \gamma \text{Post}_t + \delta_{DiD} (
 **Estimand:**
 $$ATT = \underbrace{(\mathbb{E}[Y_{2}|D=1] - \mathbb{E}[Y_{1}|D=1])}_{\text{Actual Path}} - \underbrace{(\mathbb{E}[Y_{2}|D=0] - \mathbb{E}[Y_{1}|D=0])}_{\text{Counterfactual Trend}}$$
 
-| | | |
-|:--:|:--:|:--:|
-| ![](01_canonical_2x2/figs/did_2x2.png) | ![](01_canonical_2x2/figs/did_showcase.png) | ![](01_canonical_2x2/figs/card_krueger_did.png) |
-| ![](01_canonical_2x2/figs/card_krueger_detailed.png) | | |
+![](01_canonical_2x2/figs/did_showcase.png)
 
 Static 2x2 design. Manual calculation vs. OLS verification.
 
@@ -42,9 +39,7 @@ $$Y_{it} = \mu_i + \lambda_t + \sum_{k \neq -1} \beta_k \cdot \mathbb{1}\{t - T_
 **Estimand:**
 $$ATT(t) = \mathbb{E}[Y_{t} - Y_{g-1} \mid D=1] - \mathbb{E}[Y_{t} - Y_{g-1} \mid D=0]$$
 
-| | | |
-|:--:|:--:|:--:|
-| ![](02_event_study_2xT/figs/event_study.png) | ![](02_event_study_2xT/figs/event_study_showcase.png) | ![](02_event_study_2xT/figs/raw_trends.png) |
+![](02_event_study_2xT/figs/event_study_showcase.png)
 
 Dynamic treatment effects with pre-trend testing. Reference period normalized to t = −1.
 
@@ -64,9 +59,7 @@ $$Y_{it} = \mu_i + \lambda_t + \sum_{g} \sum_{t} \tau_{g,t} \cdot \mathbb{1}\{G_
 **Estimand:**
 $$ATT(g,t) = \mathbb{E}[Y_{t} - Y_{g-1} \mid G=g] - \mathbb{E}[Y_{t} - Y_{g-1} \mid G \in \mathcal{C}_{NYT}]$$
 
-| | | |
-|:--:|:--:|:--:|
-| ![](03_staggered_GxT/figs/staggered_event_study.png) | ![](03_staggered_GxT/figs/att_gt_matrix.png) | ![](03_staggered_GxT/figs/raw_trends_by_cohort.png) |
+![](03_staggered_GxT/figs/staggered_event_study.png)
 
 Callaway & Sant'Anna ATT(g,t) aggregation. Not-yet-treated as controls.
 
@@ -86,10 +79,7 @@ $$\Delta Y_i = \alpha + \mathbf{X}_i'\beta + \varepsilon_i \quad \text{weighted 
 **Estimand:**
 $$ATT = \mathbb{E}[\Delta Y \mid D=1] - \mathbb{E}\big[ \mathbb{E}[\Delta Y \mid X, D=0] \big| D=1 \big]$$
 
-| | | |
-|:--:|:--:|:--:|
-| ![](04_covariates_dr/figs/method_comparison.png) | ![](04_covariates_dr/figs/propensity_scores.png) | ![](04_covariates_dr/figs/pscore_overlap.png) |
-| ![](04_covariates_dr/figs/earnings_trends.png) | ![](04_covariates_dr/figs/earnings_trends_dip.png) | ![](04_covariates_dr/figs/results_comparison.png) |
+![](04_covariates_dr/figs/results_comparison.png)
 
 IPW, outcome regression, and DR estimation for conditional parallel trends.
 
@@ -109,9 +99,7 @@ $$Y_{it} = \mu_i + \lambda_t + \delta D_{it} + \eta (D_{it} \times \text{Subgrou
 **Estimand:**
 $$ATT(x) = \mathbb{E}[Y_{post} - Y_{pre} \mid D=1, X=x] - \mathbb{E}[Y_{post} - Y_{pre} \mid D=0, X=x]$$
 
-| | |
-|:--:|:--:|
-| ![](05_hte/figs/hte_forest.png) | ![](05_hte/figs/hte_trends.png) |
+![](05_hte/figs/hte_forest.png)
 
 Split-sample DiD for subgroup analysis. Forest plot visualization of heterogeneity.
 
@@ -131,9 +119,7 @@ $$Y_{i} = \alpha + \mathbf{X}_i'\beta_{s,g,t} + \varepsilon_{i} \quad \text{for 
 **Estimand:**
 $$ATT(g,t) = \mathbb{E}[\Delta Y_{Target}^{Treat}] - \mathbb{E}\big[ \mathbb{E}[\Delta Y \mid X, S \in \mathcal{C}] \mid S=g, Q=1 \big]$$
 
-| | | |
-|:--:|:--:|:--:|
-| ![](06_triple_diff_dr/figs/ddd_comparison.png) | ![](06_triple_diff_dr/figs/covariate_imbalance.png) | ![](06_triple_diff_dr/figs/ddd_decomposition.png) |
+![](06_triple_diff_dr/figs/ddd_decomposition.png)
 
 DR-DDD following Ortiz-Villavicencio & Sant'Anna (2025). Corrects for covariate imbalance between target and placebo groups.
 
@@ -258,6 +244,18 @@ All estimates from running each module. Reported faithfully for objective compar
 | Robust DDD (Target-Adj) | -0.118 | 0.205 | OR at target covariates |
 
 **Verdict:** ~0.15 difference reflects covariate adjustment for age/marriage imbalance.
+
+---
+
+### Module 07: Synthetic DiD (Prop 99)
+
+| Method | Estimate | Notes |
+|:-------|:---------|:------|
+| Naive DiD | -27.35 | Simple average of controls |
+| Synthetic Control | -15.43 | Unit weights only |
+| SDID | -15.01 | Unit + time weights |
+
+**Verdict:** SDID combines unit weights (like SC) with time weights for doubly robust estimation.
 
 ---
 
