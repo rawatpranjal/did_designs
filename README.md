@@ -283,3 +283,4 @@ Paper: Arkhangelsky et al. (2021) Table 1. SC via pysyncon, SDID via synthdid.
 ## License
 
 MIT (c) 2025 Pranjal Rawat
+
