@@ -126,4 +126,6 @@ python main.py
 
 ## References
 
+- Baker, A., Callaway, B., Cunningham, S., Goodman-Bacon, A., & Sant'Anna, P. (2025). A Practitioner's Guide to Difference-in-Differences. [[PDF]](../papers/Baker_etal_2025_Practitioners_Guide_DiD.pdf)
+- Callaway, B., & Sant'Anna, P. H. (2021). Difference-in-differences with multiple time periods. *Journal of Econometrics*. [[PDF]](../papers/Callaway_SantAnna_2021_DiD_Multiple_Periods.pdf)
 - Abadie, A., Diamond, A., & Hainmueller, J. (2010). Synthetic Control Methods for Comparative Case Studies. *Journal of the American Statistical Association*.

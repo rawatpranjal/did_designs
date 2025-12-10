@@ -115,4 +115,4 @@ python main.py
 
 ## References
 
-- Card, D., & Krueger, A. B. (1994). Minimum Wages and Employment: A Case Study of the Fast-Food Industry in New Jersey and Pennsylvania. *American Economic Review*, 84(4), 772-793.
+- Card, D., & Krueger, A. B. (1994). Minimum Wages and Employment: A Case Study of the Fast-Food Industry in New Jersey and Pennsylvania. *American Economic Review*, 84(4), 772-793. [[PDF]](../papers/Card_Krueger_1994_Minimum_Wage_Employment.pdf)

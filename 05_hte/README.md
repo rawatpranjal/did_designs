@@ -153,6 +153,7 @@ For a **Doubly Robust DDD** approach that handles covariate imbalance, see **[Mo
 
 ## References
 
+- Baker, A., Callaway, B., Cunningham, S., Goodman-Bacon, A., & Sant'Anna, P. (2025). A Practitioner's Guide to Difference-in-Differences. [[PDF]](../papers/Baker_etal_2025_Practitioners_Guide_DiD.pdf)
+- Ortiz-Villavicencio, A. & Sant'Anna, P. H. C. (2025). Doubly Robust Difference-in-Difference-in-Differences Estimators. [[PDF]](../papers/Ortiz_SantAnna_2025_DR_DDD.pdf)
 - Gruber, J. (1994). The incidence of mandated maternity benefits. *American Economic Review*.
 - Callaway, B., Goodman-Bacon, A., & Sant'Anna, P. H. (2021). Difference-in-differences with a continuous treatment.
-- Ortiz-Villavicencio, A. & Sant'Anna, P. H. C. (2025). Doubly Robust Difference-in-Difference-in-Differences Estimators.

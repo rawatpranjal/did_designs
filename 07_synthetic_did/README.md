@@ -175,7 +175,7 @@ SDID:                -15.60  (unit + time weights)
 | Method | Unit Weights | Time Weights | Issue |
 |--------|--------------|--------------|-------|
 | Naive DiD | Equal | Equal | Poor pre-trend match |
-| SC | Optimized | Equal | Ignores time dynamics |
+| SC | Optimized | Equal | No time weighting AND no unit fixed effects (intercept). SC forces pre-trend levels to match exactly, whereas SDID allows for a parallel shift (α). |
 | SDID | Optimized | Optimized | Best of both |
 
 ### Visualization
@@ -238,7 +238,9 @@ python main.py  # Will automatically compare results
 
 ## 10. References
 
-- **Arkhangelsky, D., Athey, S., Hirshberg, D. A., Imbens, G. W., & Wager, S. (2021).** "Synthetic Difference-in-Differences." *American Economic Review*, 111(12), 4088-4118.
+- **Arkhangelsky, D., Athey, S., Hirshberg, D. A., Imbens, G. W., & Wager, S. (2021).** "Synthetic Difference-in-Differences." *American Economic Review*, 111(12), 4088-4118. [[PDF]](../papers/Arkhangelsky_etal_2021_Synthetic_DiD.pdf)
+
+- **Baker, A., Callaway, B., Cunningham, S., Goodman-Bacon, A., & Sant'Anna, P. (2025).** A Practitioner's Guide to Difference-in-Differences. [[PDF]](../papers/Baker_etal_2025_Practitioners_Guide_DiD.pdf)
 
 - **Abadie, A., Diamond, A., & Hainmueller, J. (2010).** "Synthetic Control Methods for Comparative Case Studies." *Journal of the American Statistical Association*, 105(490), 493-505.
 

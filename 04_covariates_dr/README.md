@@ -64,7 +64,9 @@ Combine IPW and OR:
 - If outcome model is correct, DR is consistent
 - **Both** can be wrong, but DR protects you if **one** is right
 
-$$\hat{ATT}_{DR} = \frac{1}{n_1} \sum_{D_i=1} \left[ \Delta Y_i - \hat{m}(\Delta Y | X_i, D=0) - \frac{1-D_i}{\hat{e}(X_i)} \cdot (Y_i - \hat{m}(Y|X_i, D=0)) \right]$$
+$$\hat{ATT}_{DR} = \frac{1}{n_1} \sum_{i=1}^{n} \left[ D_i (\Delta Y_i - \hat{\mu}_0(X_i)) - \frac{\hat{e}(X_i)(1-D_i)}{1-\hat{e}(X_i)} (\Delta Y_i - \hat{\mu}_0(X_i)) \right]$$
+
+where $\hat{e}(X_i)$ is the propensity score and $\hat{\mu}_0(X_i)$ is the predicted outcome change for controls.
 
 ## 5. The Data
 
@@ -129,5 +131,6 @@ python main.py
 
 ## References
 
+- Baker, A., Callaway, B., Cunningham, S., Goodman-Bacon, A., & Sant'Anna, P. (2025). A Practitioner's Guide to Difference-in-Differences. [[PDF]](../papers/Baker_etal_2025_Practitioners_Guide_DiD.pdf)
 - Sant'Anna, P. H., & Zhao, J. (2020). Doubly robust difference-in-differences estimators. *Journal of Econometrics*.
 - LaLonde, R. J. (1986). Evaluating the econometric evaluations of training programs. *American Economic Review*.
